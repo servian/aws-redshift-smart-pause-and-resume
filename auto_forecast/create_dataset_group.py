@@ -7,7 +7,7 @@ from utils.forecast_helpers import derive_dataset_arn
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
+    
 def handler(event, context):
     DATASET_GROUP_NAME = os.environ["DATASET_GROUP_NAME"] 
     DATASET_NAME = os.environ["DATASET_NAME"] 
@@ -22,6 +22,6 @@ def handler(event, context):
             Domain = DATASET_DOMAIN, 
             DatasetArns = [DATASET_ARN])
     except forecast_client.exceptions.ResourceAlreadyExistsException as e:
-        logger.info("ResourceAlreadyExistsException: %s" % e)
+        logger.info("ResourceAlreadyExistsException: {0}".format(e))
     except Exception as e:
-        logger.info("Exception: %s" % e)
+        logger.info("Exception: {0}".format(e))

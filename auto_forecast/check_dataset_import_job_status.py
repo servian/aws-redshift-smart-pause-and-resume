@@ -25,13 +25,6 @@ def handler(event, context):
         logger.info("resource {0} has STATUS:CREATE".format(latest_import_job_arn))
         raise ResourceCreateInProgressException
     
-    # {
-    #   "errorType": "ResourceCreateInProgressException",
-    #   "stackTrace": [
-    #     "  File \"/var/task/create_dataset_import_job.py\", line 26, in handler\n    raise ResourceCreateInProgressException\n"
-    #   ]
-    # }
-    
     
 def get_dataset_import_status(resource_arn = ""):
     forecast_client = boto3.client("forecast")

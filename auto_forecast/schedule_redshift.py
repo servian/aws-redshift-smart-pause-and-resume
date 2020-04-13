@@ -3,6 +3,7 @@ import boto3
 import logging
 import os
 import datetime as dt 
+from dateutil import tz
 
 from utils.forecast_helpers import get_forecast_values
 from utils.forecast_helpers import derive_dataset_group_arn
@@ -20,26 +21,27 @@ def handler(event, context):
     REDSHIFT_CLUSTER_ID = os.environ["REDSHIFT_CLUSTER_ID"]
     RESUME_REDSHIFT_EVENT_NAME = os.environ["RESUME_REDSHIFT_EVENT_NAME"]
     PAUSE_REDSHIFT_EVENT_NAME = os.environ["PAUSE_REDSHIFT_EVENT_NAME"]
+    TIMEZONE = os.environ["TIMEZONE"]
     DATASET_GROUP_ARN = derive_dataset_group_arn(dataset_group_name = DATASET_GROUP_NAME, lambda_function_arn = context.invoked_function_arn)
     
-    current_time = dt.datetime.now().time()
-    resume_timestamp = current_time
-    pause_timestamp = current_time
+    current_ts_utc = dt.datetime.utcnow().replace(tzinfo = tz.gettz("UTC")) # current timestamp in utc
+    resume_ts_utc = current_ts_utc
+    pause_ts_utc = current_ts_utc
     
     try:
         # TODO: when no forecast is found above threshold then we just disable the schedules, cluster should remain paused
         forecasts = get_forecast_values(forcast_arn = get_latest_forecast_job_arn(DATASET_GROUP_ARN), item_filter_value = REDSHIFT_CLUSTER_ID)
         for item in forecasts["Forecast"]["Predictions"]["mean"]:
-            item_timestamp = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S").time()
-            if item["Value"] > THRESHOLD and resume_timestamp == current_time and item_timestamp > current_time:
-                resume_timestamp = item_timestamp
-            elif item["Value"] < THRESHOLD and pause_timestamp == current_time and item_timestamp > resume_timestamp:
-                pause_timestamp = item_timestamp
-        
-        # schedule resume
-        schedule_event(event_name = RESUME_REDSHIFT_EVENT_NAME, target_arn = RESUME_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = resume_timestamp.minute, hour = resume_timestamp.hour)
-        # schedule pause
-        schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_timestamp.minute, hour = pause_timestamp.hour)
+            item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")
+            item_ts_local  = item_ts_local.astimezone(tz.gettz(TIMEZONE)) # add timezone to timestamp
+            item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC")) # convert time to UTC, use this to schedule
+            
+            if item["Value"] > THRESHOLD and resume_ts_utc == current_ts_utc and item_ts_utc > current_ts_utc:
+                resume_ts_utc = item_ts_local - dt.timedelta(minutes = 30) # resume redshift earlier
+                schedule_event(event_name = RESUME_REDSHIFT_EVENT_NAME, target_arn = RESUME_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = resume_ts_utc.minute, hour = resume_ts_utc.hour)
+            elif item["Value"] < THRESHOLD and pause_ts_utc != resume_ts_utc and item_ts_utc > resume_ts_utc + dt.timedelta(hours = 2): # only assign when resume_ts_utc is assigned and let redshift be resumed for at least 2 hours
+                pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
+                schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
     except Exception as e:
         logger.info("Exception: %s" % e)
 

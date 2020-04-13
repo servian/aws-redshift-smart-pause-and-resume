@@ -24,13 +24,6 @@ def handler(event, context):
     elif import_status.find("CREATE") != -1:
         logger.info("resource {0} has STATUS:CREATE".format(latest_predictor_arn))
         raise ResourceCreateInProgressException
-        
-    # {
-    #     "errorType": "ResourceCreateInProgressException",
-    #     "stackTrace": [
-    #         "  File \"/var/task/create_predictor_job.py\", line 29, in handler\n    raise ResourceCreateInProgressException\n"
-    #     ]
-    # }
     
     
 def get_predictor_status(resource_arn = ""):

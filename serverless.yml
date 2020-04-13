@@ -1,4 +1,4 @@
-service: smart-sched # resume-and-pause
+service: smart-sched 
 
 custom:
   log_level: INFO 
@@ -15,30 +15,46 @@ custom:
         "setuptools",
       ]
     slim: true
-  # can take this as a opt variables 
-  datasetname: redshift_schedule
-  datasetsuffix: _dataset 
-  datasetgroupsuffix: _dataset_group
+  # cli options variables 
+  redshiftclusterid: redshift-test-warehouse # ${opt:redshiftclusterid}
+  algorithmarn: ${opt:algorithmarn, "arn:aws:forecast:::algorithm/ARIMA"}
+  enableautoml: ${opt:enableautoml, "DISABLED"}} # possible values are ENABLED or DISABLED
+  timezone: ${opt:timezone, "Australia/Melbourne"}
+  intervalminutes: ${opt:intervalminutes, "15"}
+  # custom service wide variables 
+  datasetname: smart_sched_ # change this to smart_sched
+  datasetsuffix: _dataset # _${self:provider.stage} # add this suffix 
+  datasetgroupsuffix: _dataset_group # _${self:provider.stage} # add this suffix 
   datasetdomain: CUSTOM
-  redshiftclusterid: redshift-test-warehouse 
-  algorithmarn: arn:aws:forecast:::algorithm/ARIMA
+  redshiftclusterarn: "arn:aws:redshift:#{Region}:#{AccountId}:cluster:{self:custom.redshiftclusterid}" # depends on input above
+  resumeredshifteventname: ${self:service}-resume-redshift-event-${self:provider.stage}
+  pauseredshifteventname: ${self:service}-pause-redshift-event-${self:provider.stage}
+  automl:
+    ENABLED: "true"
+    DISABLED: "false"
+    default: "false"
 
 provider:
   name: aws
   runtime: python3.8
   stage: ${opt:stage, "dev"} # Override via CLI "--stage dev"
   region: ${self:custom.region}
-  iamManagedPolicies:
-    - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
-    - arn:aws:iam::aws:policy/AmazonS3FullAccess
-    - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-    - arn:aws:iam::aws:policy/AmazonForecastFullAccess
-    - arn:aws:iam::aws:policy/CloudWatchEventsFullAccess
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - "forecast:*" 
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - "iam:PassRole"
+      Resource: "#{ForecastRole.Arn}"
   environment: 
     DATASET_NAME: ${self:custom.datasetname}${self:custom.datasetsuffix}
     DATASET_GROUP_NAME: ${self:custom.datasetname}${self:custom.datasetgroupsuffix}
     DATASET_DOMAIN: ${self:custom.datasetdomain}
     REDSHIFT_CLUSTER_ID: ${self:custom.redshiftclusterid} 
+    TIMEZONE: ${self:custom.timezone}
+    INTERVAL_MINUTES: ${self:custom.intervalminutes}
   stackTags:
     environment: ${self:provider.stage}
     owner: "owner"
@@ -56,13 +72,12 @@ functions:
     name: ${self:service}-resume-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
     iamRoleStatements:
       - Effect: Allow
         Action:
           - "redshift:DescribeClusters"
           - "redshift:ResumeCluster"
-        Resource: "*" # change to arn of redshift cluster
+        Resource: "*" # ${self:custom.redshiftclusterarn}
 
   PauseRedshift:
     handler: pause_redshift.handler
@@ -70,13 +85,12 @@ functions:
     name: ${self:service}-pause-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
     iamRoleStatements:
       - Effect: Allow
         Action:
           - "redshift:DescribeClusters"
           - "redshift:PauseCluster"
-        Resource: "*" # change to arn of redshift cluster
+        Resource: "*" # ${self:custom.redshiftclusterarn}
 
   ScheduleRedshift:
     handler: schedule_redshift.handler
@@ -89,15 +103,12 @@ functions:
       PAUSE_LAMBDA_ARN: "#{PauseRedshiftLambdaFunction.Arn}"
       CLOUDWATCH_EVENT_ROLE_ARN: "#{CloudwatchEventRole.Arn}"
       THRESHOLD: 2
-      RESUME_REDSHIFT_EVENT_NAME: ${self:service}-resume-redshift-event-${self:provider.stage}
-      PAUSE_REDSHIFT_EVENT_NAME: ${self:service}-pause-redshift-event-${self:provider.stage}
+      RESUME_REDSHIFT_EVENT_NAME: ${self:custom.resumeredshifteventname}
+      PAUSE_REDSHIFT_EVENT_NAME: ${self:custom.pauseredshifteventname}
     iamRoleStatements:
       - Effect: Allow
         Action:
           - "iam:PassRole"
-          - "logs:CreateLogGroup"
-          - "logs:CreateLogStream"
-          - "logs:PutLogEvents"
           - "forecast:ListForecasts"
           - "forecast:QueryForecast"
           - "events:PutRule"
@@ -118,6 +129,10 @@ functions:
           - "cloudwatch:GetMetricStatistics" # change to arn of redshift cluster
           - "s3:PutObject" # change to metrics s3 bucket
         Resource: "*"
+      - Effect: Allow
+        Action: 
+          - "redshift:DescribeClusters"
+        Resource: "*" # ${self:custom.redshiftclusterarn}
     package:
       exclude:
         - auto_redshift/**
@@ -130,7 +145,6 @@ functions:
     timeout: 60
     environment:
       DATASET_TYPE: TARGET_TIME_SERIES
-      DATASET_FREQ: 5min
     
   CreateDatasetGroup:
     handler: create_dataset_group.handler
@@ -138,7 +152,6 @@ functions:
     name: ${self:service}-create-dataset-group-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
     package:
       exclude:
         - auto_redshift/**
@@ -159,7 +172,6 @@ functions:
     name: ${self:service}-check-dataset-import-job-status-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
   
   CreatePredictorJob:
     handler: create_predictor_job.handler
@@ -169,8 +181,7 @@ functions:
     timeout: 60
     environment:
       ALGORITHM_ARN: ${self:custom.algorithmarn}
-      FORECAST_HORIZON: 288 # 1 days worth of predictions every 5 minutes
-      FORECAST_FREQ: 5min
+      ENABLE_AUTOML: ${self:custom.automl.${self:custom.enableautoml}, ${self:custom.automl.default}}
 
   CheckPredictorJobStatus:
     handler: check_predictor_job_status.handler
@@ -178,7 +189,6 @@ functions:
     name: ${self:service}-check-predictor-job-status-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
 
   CreateForecastJob:
     handler: create_forecast_job.handler
@@ -186,7 +196,6 @@ functions:
     name: ${self:service}-create-forecast-job-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
 
   CheckForecastJobStatus:
     handler: check_forecast_job_status.handler
@@ -194,7 +203,6 @@ functions:
     name: ${self:service}-check-forecast-job-status-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
 
   OldPredictorCleanup:
     handler: old_predictor_cleanup.handler
@@ -202,7 +210,6 @@ functions:
     name: ${self:service}-old-predictor-cleanup-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
 
   OldForecastCleanup:
     handler: old_forecast_cleanup.handler
@@ -210,7 +217,52 @@ functions:
     name: ${self:service}-old-forecast-cleanup-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    # environment:
+  
+  TriggerDailyForecasts:
+    handler: trigger_gen_daily_forecasts_step_function.handler
+    module: auto_trigger
+    name: ${self:service}-trigger-gen-daily-forecasts-step-function-${self:provider.stage}
+    memorySize: 256
+    timeout: 60
+    environment:
+      STATE_MACHINE_ARN: "#{GenDailyForecastsStepFunction}"
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - "states:DescribeStateMachine"
+          - "states:StartExecution"
+          - "states:DeleteStateMachine"
+          - "states:ListExecutions"
+          - "states:UpdateStateMachine"
+        Resource: "#{GenDailyForecastsStepFunction}"
+    events:
+      - schedule:
+          name: ${self:service}-trigger-gen-daily-forecasts-${self:provider.stage}
+          rate: cron(5 0 * * ? *) # 00:05am everyday
+          timezone: ${self:custom.timezone}
+
+  TriggerRetrainModel: 
+    handler: trigger_retrain_forecast_model_step_function.handler
+    module: auto_trigger
+    name: ${self:service}-trigger-retrain-forecast-model-step-function-${self:provider.stage}
+    memorySize: 256
+    timeout: 60
+    environment:
+      STATE_MACHINE_ARN: "#{RetrainForecastModelStepFunction}"
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - "states:DescribeStateMachine"
+          - "states:StartExecution"
+          - "states:DeleteStateMachine"
+          - "states:ListExecutions"
+          - "states:UpdateStateMachine"
+        Resource: "#{RetrainForecastModelStepFunction}"
+    events:
+      - schedule:
+          name: ${self:service}-trigger-retrain-forecast-model-forecasts-${self:provider.stage}
+          rate: cron(0 9 1 * ? *) # 9:00am every first day of the month
+          timezone: ${self:custom.timezone}
 
 resources:
   Resources:
@@ -219,7 +271,7 @@ resources:
       Properties:
         BucketName: ${self:service}-redshift-metrics-bucket-${self:provider.stage}
 
-    CloudwatchEventRole: # event rule to allow invoke lambda
+    CloudwatchEventRole: # event role to allow invoke lambda
       Type: AWS::IAM::Role
       Properties: 
         AssumeRolePolicyDocument: 
@@ -266,10 +318,10 @@ resources:
               Statement:
                 - Effect: Allow
                   Action:
-                    - "s3:*"
-                    # - "s3:Get*"
-                    # - "s3:List*"
-                    # - "s3:PutObject"
+                    # - "s3:*"
+                    - "s3:Get*"
+                    - "s3:List*"
+                    - "s3:PutObject"
                   Resource: "#{MetricsBucket.Arn}" 
 
     StepFunctionsRole:
@@ -294,7 +346,18 @@ resources:
                   Action:
                     - "lambda:InvokeFunction"
                   Resource: 
-                    - "*" # must make this just to lambdas in this template
+                    - "#{CreateDatasetLambdaFunction.Arn}"
+                    - "#{CreateDatasetGroupLambdaFunction.Arn}"
+                    - "#{ScrapeRedshiftMetricsLambdaFunction.Arn}"
+                    - "#{CreateDatasetImportJobLambdaFunction.Arn}"
+                    - "#{CheckDatasetImportJobStatusLambdaFunction.Arn}"
+                    - "#{CreatePredictorJobLambdaFunction.Arn}"
+                    - "#{CheckPredictorJobStatusLambdaFunction.Arn}"
+                    - "#{OldPredictorCleanupLambdaFunction.Arn}"
+                    - "#{CreateForecastJobLambdaFunction.Arn}"
+                    - "#{CheckForecastJobStatusLambdaFunction.Arn}"
+                    - "#{OldForecastCleanupLambdaFunction.Arn}"
+                    - "#{ScheduleRedshiftLambdaFunction.Arn}"
           - PolicyName: ${self:service}-step-functions-logging-policy
             PolicyDocument:
               Version: "2012-10-17"
@@ -309,35 +372,43 @@ resources:
     ResumeRedshiftEventRule:
       Type: AWS::Events::Rule
       Properties: 
-        # Description: ""
-        Name: ${self:service}-resume-redshift-event-${self:provider.stage} # this value is the same as the env var above
+        Name: ${self:custom.resumeredshifteventname}
         RoleArn: "#{CloudwatchEventRole.Arn}"
-        ScheduleExpression: "cron(0/0 0 29 2 ? *)" # a placeholder until to have rule as part of stack 
-        State: DISABLED # disabled at first 
+        ScheduleExpression: "cron(0/0 0 29 2 ? *)" # a placeholder schedule 
+        State: DISABLED 
         Targets: 
           - Arn: "#{ResumeRedshiftLambdaFunction.Arn}"
             Id: resume-redshift-lambda-function
 
+    ResumeEventLambdaPermission:
+      Type: AWS::Lambda::Permission
+      Properties: 
+        Action: lambda:InvokeFunction
+        FunctionName: "#{ResumeRedshiftLambdaFunction.Arn}"
+        Principal: events.amazonaws.com
+        SourceArn: "#{ResumeRedshiftEventRule.Arn}"
+
     PauseRedshiftEventRule:
       Type: AWS::Events::Rule
       Properties: 
-        # Description: ""
-        Name: ${self:service}-pause-redshift-event-${self:provider.stage} # this value is the same as the env var above
+        Name: ${self:custom.pauseredshifteventname}
         RoleArn: "#{CloudwatchEventRole.Arn}"
-        ScheduleExpression: "cron(0/0 0 29 2 ? *)" # a placeholder until to have rule as part of stack
-        State: DISABLED # disabled at first 
+        ScheduleExpression: "cron(0/0 0 29 2 ? *)" # a placeholder schedule 
+        State: DISABLED
         Targets: 
           - Arn: "#{PauseRedshiftLambdaFunction.Arn}"
             Id: pause-redshift-lambda-function
-
-    # create schedules for daily forecasts and monthly model training
-    # GenDailyForecastsEventRule:
-    #   Type: AWS::Events::Rule
-    # RetrainForecastModelEventRule:
-    #   Type: AWS::Events::Rule
+    
+    PauseEventLambdaPermission:
+      Type: AWS::Lambda::Permission
+      Properties: 
+        Action: lambda:InvokeFunction
+        FunctionName: "#{PauseRedshiftLambdaFunction.Arn}"
+        Principal: events.amazonaws.com
+        SourceArn: "#{PauseRedshiftEventRule.Arn}"
 
     # dataset imports usually finish ~5min
-    # dataset predictions usually finish ~
+    # dataset predictions usually finish ~30min, with AutoML enabled around 2-3hours
     # dataset forecasts usually finish ~20min 
     GenDailyForecastsStepFunction:
       Type: AWS::StepFunctions::StateMachine
@@ -364,8 +435,8 @@ resources:
               "Resource": "#{CheckDatasetImportJobStatusLambdaFunction.Arn}",
               "Retry": [{
                   "ErrorEquals": ["ResourceCreateInProgressException"],
-                  "IntervalSeconds": 30,
-                  "MaxAttempts": 30,
+                  "IntervalSeconds": 20,
+                  "MaxAttempts": 20,
                   "BackoffRate": 2
                 }],
               "Next": "CreateForecastJob"
@@ -380,8 +451,8 @@ resources:
                 "Resource": "#{CheckForecastJobStatusLambdaFunction.Arn}",
                 "Retry": [{
                   "ErrorEquals": ["ResourceCreateInProgressException"],
-                  "IntervalSeconds": 30,
-                  "MaxAttempts": 30,
+                  "IntervalSeconds": 20,
+                  "MaxAttempts": 20,
                   "BackoffRate": 2
                 }],
                 "Next": "OldForecastCleanup"
@@ -432,8 +503,8 @@ resources:
                 "Resource": "#{CheckDatasetImportJobStatusLambdaFunction.Arn}",
                 "Retry": [{
                   "ErrorEquals": ["ResourceCreateInProgressException"],
-                  "IntervalSeconds": 30,
-                  "MaxAttempts": 30,
+                  "IntervalSeconds": 20,
+                  "MaxAttempts": 20,
                   "BackoffRate": 2
                 }],
                 "Next": "CreatePredictorJob"
@@ -448,8 +519,8 @@ resources:
                 "Resource": "#{CheckPredictorJobStatusLambdaFunction.Arn}",
                 "Retry": [{
                   "ErrorEquals": ["ResourceCreateInProgressException"],
-                  "IntervalSeconds": 30,
-                  "MaxAttempts": 30,
+                  "IntervalSeconds": 20,
+                  "MaxAttempts": 20,
                   "BackoffRate": 2
                 }],
                 "Next": "OldPredictorCleanup"
@@ -465,12 +536,22 @@ resources:
             }
           }'
 
-#  Outputs:
-#     NewOutput:
-#       Description: "Description for the output"
-#       Value: "Some output value"
+  Outputs:
+    MetricsBucketName:
+      Value: "#{MetricsBucket}"
+    Timezone:
+      Value: ${self:custom.timezone}
+    IntervalMinutes:
+      Value: ${self:custom.intervalminutes}
+    RedshiftClusterId:
+      Value: ${self:custom.redshiftclusterid}
+    RetrainForecastModelStepFunction:
+      Value: "#{RetrainForecastModelStepFunction}"
+    GenDailyForecastsStepFunctionArn:
+      Value: "#{GenDailyForecastsStepFunction}"
 
 plugins:
   - serverless-pseudo-parameters
   - serverless-python-requirements
   - serverless-iam-roles-per-function
+  - serverless-local-schedule
