@@ -16,15 +16,15 @@ custom:
       ]
     slim: true
   # cli options variables 
-  redshiftclusterid: redshift-test-warehouse # ${opt:redshiftclusterid}
+  redshiftclusterid: ${opt:redshiftclusterid}
   algorithmarn: ${opt:algorithmarn, "arn:aws:forecast:::algorithm/ARIMA"}
   enableautoml: ${opt:enableautoml, "DISABLED"}} # possible values are ENABLED or DISABLED
   timezone: ${opt:timezone, "Australia/Melbourne"}
   intervalminutes: ${opt:intervalminutes, "15"}
   # custom service wide variables 
-  datasetname: smart_sched_ # change this to smart_sched
-  datasetsuffix: _dataset # _${self:provider.stage} # add this suffix 
-  datasetgroupsuffix: _dataset_group # _${self:provider.stage} # add this suffix 
+  datasetname: smart_sched
+  datasetsuffix: _dataset_${self:provider.stage} 
+  datasetgroupsuffix: _dataset_group_${self:provider.stage}
   datasetdomain: CUSTOM
   redshiftclusterarn: "arn:aws:redshift:#{Region}:#{AccountId}:cluster:{self:custom.redshiftclusterid}" # depends on input above
   resumeredshifteventname: ${self:service}-resume-redshift-event-${self:provider.stage}

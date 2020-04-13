@@ -135,7 +135,7 @@ unique identifier of the redshift cluster to enable smart scheduling
 
 `--enableautoml` (string)
 
-possible values `ENABLE` or `DISABLED` (default: `DISABLED`)
+possible values `ENABLED` or `DISABLED` (default: `DISABLED`)
 
 `--algorithmarn` (string)
 
