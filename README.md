@@ -185,7 +185,7 @@ granularity of average Redshift CPU utilisation to use throughout stack (default
 
 ## Scraping and Training Forecast Model After Deployment
 
-The following script scrapes Redshift CPU utilisation data and uses it to initially train an Amazon Forecast Model after deploying the stack. 
+The following script scrapes Redshift CPU utilisation data, and uses it to initially train an Amazon Forecast Model after deploying the stack by executing the Train Forecast Model Step Function. 
 
 ```
 python3 local_scrape_and_train.py 
@@ -201,11 +201,11 @@ AWS Profile to deploy resources (default value: `default`)
 
 `--numdaystoscrape` (string)
 
-Number of days (from previuos day) worth of Redshift CPU utilisation data to scrape (default value: `14`)
+number of days (from previous day) worth of Redshift CPU utilisation data to scrape (default value: `14`)
 
 `--cfnstackname` (string)
 
-Cloudformation stack name (default value: `smart-sched`. Which is `service-name` in serverless.yml template)
+cloudformation stack name (default value: `smart-sched`. Which is `service-name` in serverless.yml template)
 
 `--stage` (string)
 
