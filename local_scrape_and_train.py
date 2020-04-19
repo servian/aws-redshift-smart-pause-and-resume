@@ -12,7 +12,7 @@ def init_argparse():
     """
     parser = argparse.ArgumentParser(description = "Script to add data to Metrics Bucket to train initial Amazon Forecase Model")
     parser.add_argument("--awsprofile", default = "default", type = str, help = "AWS profile. If empty [default profile will be used if present]")
-    parser.add_argument("--numdaystoscrape", default = 7, type = int, help = "Number of days of Redshift metric data to scrape to train initial Amazon Forecast Model")
+    parser.add_argument("--numdaystoscrape", default = 14, type = int, help = "Number of days of Redshift metric data to scrape to train initial Amazon Forecast Model")
     parser.add_argument("--cfnstackname", default = "smart-sched", help = "Name of cloudformation stack")
     parser.add_argument("--stage", default = "dev", help = "Name of environment")
     return parser
@@ -65,9 +65,6 @@ def scrape_redshift_metrics(bucket_name = "", redshift_cluster_id = "", num_days
 def get_redshift_metrics(start_time = dt.datetime(2000, 1, 1, 1, 0, 0, 0), end_time = dt.datetime(2000, 1, 1, 1, 0, 0, 0), redshift_cluster_id = "", interval_minutes = 0):
     """
     """
-    
-    cloudwatch_client = boto3.client("cloudwatch")
-    
     redshift_client = session.client("redshift")
     num_nodes = redshift_client.describe_clusters(ClusterIdentifier = redshift_cluster_id)["Clusters"][0]["NumberOfNodes"]
         
@@ -78,6 +75,7 @@ def get_redshift_metrics(start_time = dt.datetime(2000, 1, 1, 1, 0, 0, 0), end_t
         nodes.append("Leader")
     
     node_avg_metrics = []
+    cloudwatch_client = boto3.client("cloudwatch")
     for node in nodes:
         response = cloudwatch_client.get_metric_statistics(
                 Namespace = "AWS/Redshift",
@@ -129,6 +127,7 @@ if __name__ == "__main__":
     cfn_client = session.client("cloudformation")
     cfn_outputs = get_cfn_resource_outputs(stack_output_list = cfn_client.describe_stacks(StackName = cfn_stack_name)["Stacks"][0]["Outputs"])
 
+    # scrape some initial redshift mettics
     scrape_redshift_metrics(bucket_name = cfn_outputs["MetricsBucketName"], 
                             redshift_cluster_id = cfn_outputs["RedshiftClusterId"], 
                             num_days = args.numdaystoscrape, 
@@ -137,7 +136,8 @@ if __name__ == "__main__":
 
     # train forecast model for the first time model     
     sfn_client = session.client("stepfunctions")
-    sfn_client.start_execution(stateMachineArn = cfn_outputs["RetrainForecastModelStepFunction"], name = "gen_daily_forecasts_run_" + dt.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S"))
+    sfn_client.start_execution(stateMachineArn = cfn_outputs["TrainForecastModelStepFunction"], name = "train_forecast_model_run_" + dt.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S"))
+    print("Executed 'Train Forecast Model Step Function'..")
     
   
     

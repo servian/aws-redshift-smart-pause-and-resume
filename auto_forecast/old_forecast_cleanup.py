@@ -25,5 +25,5 @@ def handler(event, context):
                 forecast_client.delete_forecast(ForecastArn = actv_forecasts[i]["ForecastArn"])
                 logger.info("initialised delete forecast job: {0}".format(actv_forecasts[i]["ForecastArn"]))
     except Exception as e:
-        logger.info("Exception: %s" % e)
+        logger.info("Exception: {0}".format(e))
     

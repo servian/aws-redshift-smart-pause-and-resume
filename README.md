@@ -1,16 +1,16 @@
-# Redshift Smart Pause and Resume (!!WIP)
+# Redshift Smart Pause and Resume
 
 ![Language](https://img.shields.io/github/languages/top/servian/aws-auto-remediate.svg) [![serverless](http://public.serverless.com/badges/v3.svg)](http://www.serverless.com)
 
-Open source application to automatically resume and pause Redshift using AWS Lambda, CloudWatch Metrics and Events, Amazon Forecast and Step Functions.
+Open source tool to automatically pause and resume Redshift (single and multi-node) clusters using AWS Lambda, CloudWatch Metrics and Events, Amazon Forecast and Step Functions.
 
 ## About
 
-### Resuming and Pausing Redshift using Cluster CPU Utilisation Metrics from CloudWatch
+### Resuming and Pausing Redshift using Cluster CPU utilisation Metrics from CloudWatch
 
-CPU Utilisation data from an existing Redshift data warehouse is scraped from Cloudwatch metrics. In particular, the metric is the average CPU utilisation at 15 minute intervals by default (value is configurable: recommended values are 5, 15, 30, 60 minute intervals). The data scraped is then used to train an Amazon Forecast model, and the resulting forecast predictions are used to determine when to resume and pause a Redshift data warehouse. 
+CPU utilisation data from an existing Redshift data warehouse is scraped from Cloudwatch metrics. In particular, the metric is the average CPU utilisation at 15 minute intervals by default (value is configurable: recommended values are 5, 15, 30, 60 minute intervals). The data scraped is then used to train an Amazon Forecast model, and the resulting forecast predictions are used to determine when to resume and pause a Redshift data warehouse. 
 
-A threshold value is set and used determine when to resume and pause a Redshift cluster. To illustrate, if a threshold value of 5% (i.e., 5% CPU Utilisation) is set, the Reshift cluster will be scheduled to be resumed around a timestamp when CPU Utilisation is forecasted to be over the threshold value. On the other hand, given the same threshold value, a Reshift cluster will be scheduled to be paused around a timestamp when CPU Utilisation is forecasted to be under the threshold value. 
+A threshold value is set and used determine when to resume and pause a Redshift cluster. To illustrate, if a threshold value of 5% (i.e., 5% CPU utilisation) is set, the Reshift cluster will be scheduled to be resumed around a timestamp when CPU utilisation is forecasted to be over the threshold value. On the other hand, given the same threshold value, a Reshift cluster will be scheduled to be paused around a timestamp when CPU utilisation is forecasted to be under the threshold value. 
 
 Forecasted CPU utilisation activity example is showcased below. For this example, given the forecasted values:
 
@@ -20,24 +20,25 @@ Forecasted CPU utilisation activity example is showcased below. For this example
 
 ![schedule-example](images/schedule-example.svg)
 
-### Forecast Model Training Step Function
+### AWS Serverless Architecture 
 
-The following step function consists of a number of steps aimed to produce an Amazon Forecast Predictor Model predicting Redshift CPU Utilisation. This step function can be scheduled to run more frequently depending on how often Redshift Utilisation activity pattern changes. If AutoML is enabled the most appropriate forecast model will be fitted to the provided dataset. By default this step function is scheduled to run on the first day of each month at 9:00 (Time based on the provided timezone). 
+This tool in a nutshell consists to 2 step functions: (1) [Train Forecast Model Step Function](#train-forecast-model-step-function) and (2) [Generate Forecasts Step Function](#generate-forecasts-step-function). Both of these step functions are executed using Lambda functions, and these Lambda functions are triggered with Scheduled Cloudwatch Events. Events are scheduled based on the timezone specified when deploying the tool. 
 
-![model-train-step-function](images/model-train-step-function.svg)
+![serverless-architecture](images/serverless-architecture.png)
 
-### Forecast Model Prediction Step Function
+### Train Forecast Model Step Function
 
-The following step function consists of a number of steps aimed to produce Amazon Forecast Predictions using the resulting model trained from the above mentioned step function. This step function can be scheduled daily. In particular, Redshift metrics data scraped the previous day is used alongside existing data to generate redshift metric forecasts for the following day. Forecasts are then used to determine when to resume and pause the Redshift cluster. By default this step function is scheduled to run everyday at 12:05 midnight (Time is based on the provided timezone). 
+The following step function consists of a number of steps aimed to produce an Amazon Forecast Model predicting Redshift CPU utilisation. This step function can be scheduled to run more frequently depending on how often Redshift utilisation activity pattern changes. If AutoML is enabled the most appropriate forecast model will be fitted to the provided dataset. By default this step function is scheduled to run on the first day of each month at 9:00 (Time based on the provided timezone). 
 
-![model-prediction-step-function](images/model-prediction-step-function.svg)
+### Generate Forecasts Step Function
 
+The following step function consists of a number of steps aimed to produce Amazon Forecast Predictions using the resulting model trained from the above mentioned step function. This step function is scheduled daily. In particular, Redshift metrics data scraped the previous day is used alongside existing data to generate redshift metric forecasts for the following day. Forecasts are then used to determine when to resume and pause the Redshift cluster. By default this step function is scheduled to run everyday at 12:05 midnight (Time is based on the provided timezone). 
 
 ## Setup
  
 ### Deploy 
 
-1. Install Servereless Framework
+1. Install Serverless Framework
 ```bash
 npm install serverless
 ```
@@ -67,9 +68,28 @@ serverless plugin install --name serverless-pseudo-parameters
 serverless plugin install --name serverless-local-schedule
 ```
 
-6. Deploy Service to AWS Account. (See [Deployment Options](#deployment-options) below for list of options)
+6. Deploy Service to AWS Account. The options `redshiftclusterid` and `datasetname` are required and need to be specified upon deploying the tool. (See [Deployment Options](#deployment-options) below for more details on these and other options provided).
+
+* **`NOTE:`** If deploying the tool to a second Redshift cluster ensure that the value for `service:` in the `serverless.yml` template is changed. Currently, the value is `smart-sched`. Possible value is `smart-sched-01`.
+
 ```bash
-serverless deploy [--region <AWS region>] [--aws-profile <AWS CLI profile>] [--redshiftclusterid <AWS redshift cluster id>]
+serverless deploy \
+ [--region <AWS region>] \
+ [--aws-profile <AWS CLI profile>] \
+ [--redshiftclusterid <AWS redshift cluster id>] \
+ [--datasetname <AWS forecast dataset name>]
+```
+
+7. After Deployment run the following script to initially scrape for data and train forecast model. (See [Scraping and Training Forecast Model After Deployment](#Scraping-and-Training-Forecast-Model-After-Deployment) below for more details and details on some options provided).
+
+* **`NOTE:`** If the value for `service:` in the `serverless.yml` template was changed, be sure to provide a value for `cfnstackname` which consistent to the change made. Since the stack name is dependent on the value provided for `service:`.
+
+```
+python3 local_scrape_and_train.py 
+[--awsprofile <value>] \
+[--numdaystoscrape <value>] \
+[--cfnstackname  <value>] \
+[--stage  <value>]
 ```
 
 ### Update
@@ -86,9 +106,15 @@ serverless create --template-url https://github.com/servian/aws-redshift-smart-p
 cd aws-redshift-smart-pause-and-resume 
 ```
 
-3. Redeploy Service to AWS Account
+3. Redeploy service to AWS Account. The options `redshiftclusterid` and `datasetname` are required and need to be specified upon deploying the tool. (See [Deployment Options](#deployment-options) below for more details on these and other options provided). 
+
+* **`NOTE:`** if updating the tool to a second Redshift cluster ensure that the value for `service:` in the `serverless.yml` template is changed and is consistent to when this tool was first deployed. Currently, the value is `smart-sched`. Possible value is `smart-sched-01`, if this is the value used when deploying the tool to a second Redshift cluster. 
 ```bash
-serverless deploy [--region <AWS region>] [--aws-profile <AWS CLI profile>] [--redshiftclusterid <AWS redshift cluster id>]
+serverless deploy \
+ [--region <AWS region>] \
+ [--aws-profile <AWS CLI profile>] \
+ [--redshiftclusterid <AWS redshift cluster id>] \
+ [--datasetname <AWS forecast dataset name>]
 ```
 
 ### Remove
@@ -100,7 +126,11 @@ cd aws-redshift-smart-pause-and-resume
 
 2. Remove Service from AWS Account
 ```bash
-serverless remove [--region <AWS region>] [--aws-profile <AWS CLI profile>]
+serverless remove \
+ [--region <AWS region>] \
+ [--aws-profile <AWS CLI profile>] \
+ [--redshiftclusterid <AWS redshift cluster id>] \
+ [--datasetname <AWS forecast dataset name>]
 ```
 
 ## Deployment Options
@@ -111,10 +141,10 @@ serverless deploy \
 [--region <value>] \
 [--stage <value>] \
 [--redshiftclusterid <value>] \
+[--datasetname <value>] \
 [--enableautoml <value>] \
 [--algorithmarn <value>] \
 [--timezone <value>] \
-
 ```
 
 `--aws-profile` (string)
@@ -133,13 +163,17 @@ environment suffix (default value: `dev`)
 
 unique identifier of the redshift cluster to enable smart scheduling
 
+`--datasetname` (string: REQUIRED)
+
+a name for the Amazon forecast dataset. It is recommeded to have the name to be the similar to the Redshift cluster ID, but instead of hyphens use underscores instead. e.g., if `redshiftclusterid` is `"test-warehouse"` then `datasetname` is `"test_warehouse"`
+
 `--enableautoml` (string)
 
 possible values `ENABLED` or `DISABLED` (default: `DISABLED`)
 
 `--algorithmarn` (string)
 
-[Possible values](https://docs.aws.amazon.com/forecast/latest/dg/aws-forecast-choosing-recipes.html) (default: `arn:aws:forecast:::algorithm/ARIMA`)
+[Possible values](https://docs.aws.amazon.com/forecast/latest/dg/aws-forecast-choosing-recipes.html) (default: `arn:aws:forecast:::algorithm/Deep_AR_Plus`)
 
 `--timezone` (string)
 
@@ -147,18 +181,18 @@ possible values `ENABLED` or `DISABLED` (default: `DISABLED`)
 
 `--intervalminutes` (int)
 
-granularity of average Redshift CPU Utilisation to use throughout stack (default: `15`)
+granularity of average Redshift CPU utilisation to use throughout stack (default: `15`)
 
-## Adding data to train Amazon Forecast Model for the first time after deployment
+## Scraping and Training Forecast Model After Deployment
 
-The following script scrapes Redshift CPU Utilisation data and uses it to initially train an Amazon Forecast Model after deploying the stack. 
+The following script scrapes Redshift CPU utilisation data and uses it to initially train an Amazon Forecast Model after deploying the stack. 
 
 ```
 python3 local_scrape_and_train.py 
 [--awsprofile <value>] \
 [--numdaystoscrape <value>] \
 [--cfnstackname  <value>] \
-[--stage  <value>] \
+[--stage  <value>]
 ```
 
 `--awsprofile` (string)
@@ -167,7 +201,7 @@ AWS Profile to deploy resources (default value: `default`)
 
 `--numdaystoscrape` (string)
 
-Number of days (from previuos day) worth of Redshift CPU Utilisation data to scrape (default value: `7`)
+Number of days (from previuos day) worth of Redshift CPU utilisation data to scrape (default value: `14`)
 
 `--cfnstackname` (string)
 

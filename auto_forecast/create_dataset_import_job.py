@@ -33,6 +33,6 @@ def handler(event, context):
             TimestampFormat = TIMESTAMP_FORMAT
         )
     except forecast_client.exceptions.ResourceAlreadyExistsException as e:
-        logger.info("ResourceAlreadyExistsException: %s" % e)
+        logger.info("ResourceAlreadyExistsException: {0}".format(e))
     except Exception as e:
         logger.info("Exception: {0}".format(e))

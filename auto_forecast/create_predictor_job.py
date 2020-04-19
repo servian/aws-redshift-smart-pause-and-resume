@@ -51,6 +51,6 @@ def handler(event, context):
             }
         )
     except forecast_client.exceptions.ResourceAlreadyExistsException as e:      
-        logger.info("ResourceAlreadyExistsException: %s" % e)
+        logger.info("ResourceAlreadyExistsException: {0}".format(e))
     except Exception as e:
-        logger.info("Exception: %s" % e)
+        logger.info("Exception: {0}".format(e))

@@ -19,9 +19,9 @@ def handler(event, context):
     TIMEZONE = os.environ["TIMEZONE"]
     
     try:
-        dt_end_utc = dt.datetime.utcnow().replace(tzinfo=tz.gettz('UTC')) # current timestamp in utc
+        dt_end_utc = dt.datetime.utcnow().replace(tzinfo = tz.gettz('UTC')) # current timestamp in utc
         dt_end_local = dt_end_utc.astimezone(tz.gettz(TIMEZONE)) # convert to current timestamp in specified timezone
-        dt_end_local = dt.datetime(dt_end_local.year, dt_end_local.month, dt_end_local.day, 0, 0, 0, 0).replace(tzinfo=tz.gettz(TIMEZONE))
+        dt_end_local = dt.datetime(dt_end_local.year, dt_end_local.month, dt_end_local.day, 0, 0, 0, 0).replace(tzinfo = tz.gettz(TIMEZONE))
         
         dt_start_local = dt_end_local - dt.timedelta(days=1) # previous day 
         dt_iter_local = dt_start_local 

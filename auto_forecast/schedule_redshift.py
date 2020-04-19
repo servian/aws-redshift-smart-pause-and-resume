@@ -39,11 +39,15 @@ def handler(event, context):
             if item["Value"] > THRESHOLD and resume_ts_utc == current_ts_utc and item_ts_utc > current_ts_utc:
                 resume_ts_utc = item_ts_local - dt.timedelta(minutes = 30) # resume redshift earlier
                 schedule_event(event_name = RESUME_REDSHIFT_EVENT_NAME, target_arn = RESUME_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = resume_ts_utc.minute, hour = resume_ts_utc.hour)
-            elif item["Value"] < THRESHOLD and pause_ts_utc != resume_ts_utc and item_ts_utc > resume_ts_utc + dt.timedelta(hours = 2): # only assign when resume_ts_utc is assigned and let redshift be resumed for at least 2 hours
-                pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
-                schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
+            elif item["Value"] < THRESHOLD:
+                if pause_ts_utc != resume_ts_utc and item_ts_utc > resume_ts_utc + dt.timedelta(hours = 2): # assign when resume_ts_utc is assigned and let redshift be resumed for at least 2 hours
+                    pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
+                    schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
+                elif pause_ts_utc == current_ts_utc: # assign when resume_ts_utc is not assigned. i.e., cluster was resumed manually
+                    pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
+                    schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
     except Exception as e:
-        logger.info("Exception: %s" % e)
+        logger.info("Exception: {0}".format(e))
 
     
 def schedule_event(event_name = "", target_arn = "", event_role_arn = "" , event_description = "", minute = 0, hour = 0):

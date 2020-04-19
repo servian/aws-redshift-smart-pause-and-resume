@@ -14,8 +14,8 @@ def handler(event, context):
         sfn_client = boto3.client("stepfunctions")
         sfn_client.start_execution(
             stateMachineArn = STATE_MACHINE_ARN,
-            name = "retrain_forecast_model_run_" + dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            name = "train_forecast_model_run_" + dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         )
     except Exception as e:
-        logger.info("Exception: %s" % e)
+        logger.info("Exception: {0}".format(e))
         
