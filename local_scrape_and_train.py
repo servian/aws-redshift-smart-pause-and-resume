@@ -63,8 +63,6 @@ def scrape_redshift_metrics(bucket_name = "", redshift_cluster_id = "", num_days
         
 
 def get_redshift_metrics(start_time = dt.datetime(2000, 1, 1, 1, 0, 0, 0), end_time = dt.datetime(2000, 1, 1, 1, 0, 0, 0), redshift_cluster_id = "", interval_minutes = 0):
-    """
-    """
     redshift_client = session.client("redshift")
     num_nodes = redshift_client.describe_clusters(ClusterIdentifier = redshift_cluster_id)["Clusters"][0]["NumberOfNodes"]
         

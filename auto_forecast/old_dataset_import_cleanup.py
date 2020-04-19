@@ -24,6 +24,5 @@ def handler(event, context):
             if dataset_import_jobs[i]["DatasetImportJobArn"] != latest_dataset_import_job_arn:
                 forecast_client.delete_dataset_import_job(DatasetImportJobArn = dataset_import_jobs[i]["DatasetImportJobArn"])
                 logger.info("initialised delete dataset import job: {0}".format(dataset_import_jobs[i]["DatasetImportJobArn"]))
-                # TODO: might need to catch the following exception ResourceInUseException in step functions in order to completely cleanup resource
     except Exception as e:
         logger.info("Exception: {0}".format(e))

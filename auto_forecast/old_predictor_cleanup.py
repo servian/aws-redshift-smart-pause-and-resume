@@ -24,6 +24,5 @@ def handler(event, context):
             if actv_predictors[i]["PredictorArn"] != latest_predictor_arn:
                 forecast_client.delete_predictor(PredictorArn = actv_predictors[i]["PredictorArn"])
                 logger.info("initialised delete predictor job: {0}".format(actv_predictors[i]["PredictorArn"]))
-                # TODO: might need to catch the following exception ResourceInUseException in step functions in order to completely cleanup resource
     except Exception as e:
         logger.info("Exception: {0}".format(e))

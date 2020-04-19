@@ -350,6 +350,11 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:service}-redshift-metrics-bucket-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: TRUE
+          BlockPublicPolicy: TRUE
+          IgnorePublicAcls: TRUE
+          RestrictPublicBuckets: TRUE
 
     CloudwatchEventRole: # event role to allow invoke lambda
       Type: AWS::IAM::Role

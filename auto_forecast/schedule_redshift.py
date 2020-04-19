@@ -25,27 +25,29 @@ def handler(event, context):
     DATASET_GROUP_ARN = derive_dataset_group_arn(dataset_group_name = DATASET_GROUP_NAME, lambda_function_arn = context.invoked_function_arn)
     
     current_ts_utc = dt.datetime.utcnow().replace(tzinfo = tz.gettz("UTC")) # current timestamp in utc
-    resume_ts_utc = current_ts_utc
-    pause_ts_utc = current_ts_utc
+    resume_scheduled = False
+    pause_scheduled = False
     
     try:
-        # TODO: when no forecast is found above threshold then we just disable the schedules, cluster should remain paused
         forecasts = get_forecast_values(forcast_arn = get_latest_forecast_job_arn(DATASET_GROUP_ARN), item_filter_value = REDSHIFT_CLUSTER_ID)
         for item in forecasts["Forecast"]["Predictions"]["mean"]:
             item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")
             item_ts_local  = item_ts_local.astimezone(tz.gettz(TIMEZONE)) # add timezone to timestamp
             item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC")) # convert time to UTC, use this to schedule
             
-            if item["Value"] > THRESHOLD and resume_ts_utc == current_ts_utc and item_ts_utc > current_ts_utc:
+            if item["Value"] > THRESHOLD and resume_scheduled == False and item_ts_utc > current_ts_utc:
                 resume_ts_utc = item_ts_local - dt.timedelta(minutes = 30) # resume redshift earlier
                 schedule_event(event_name = RESUME_REDSHIFT_EVENT_NAME, target_arn = RESUME_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = resume_ts_utc.minute, hour = resume_ts_utc.hour)
-            elif item["Value"] < THRESHOLD:
-                if pause_ts_utc != resume_ts_utc and item_ts_utc > resume_ts_utc + dt.timedelta(hours = 2): # assign when resume_ts_utc is assigned and let redshift be resumed for at least 2 hours
+                resume_scheduled == True
+            elif item["Value"] < THRESHOLD and pause_scheduled == False:
+                if  resume_scheduled == True and item_ts_utc > resume_ts_utc + dt.timedelta(hours = 2): # assign when resume is scheduled and let redshift be resumed for at least 2 hours
                     pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
                     schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
-                elif pause_ts_utc == current_ts_utc: # assign when resume_ts_utc is not assigned. i.e., cluster was resumed manually
+                    pause_scheduled == True
+                elif resume_scheduled == False: # assign when resume is not scheduled. i.e., cluster was resumed manually
                     pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
                     schedule_event(event_name = PAUSE_REDSHIFT_EVENT_NAME, target_arn = PAUSE_LAMBDA_ARN, event_role_arn = CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
+                    pause_scheduled == True
     except Exception as e:
         logger.info("Exception: {0}".format(e))
 
