@@ -18,14 +18,14 @@ def init_argparse():
 
 
 def scrape_redshift_metrics(bucket_name="", redshift_cluster_id="", num_days=7, timezone="Australia/Melbourne", interval_minutes=0):
-    """[retrieve Redshift CPU utilisation metric data for the past num_days. Note: following should be able to adjust to DST]
+    """Retrieve Redshift CPU utilisation metric data for the past num_days. Note: following should be able to adjust to DST
 
     Keyword Arguments:
-        bucket_name {str} -- [bucket location to store metrics scraped] (default: {""})
-        redshift_cluster_id {str} -- [redshift cluster to scrape metrics from] (default: {""})
-        num_days {int} -- [number of days of data to scrape] (default: {7})
-        timezone {str} -- [timezone] (default: {"Australia/Melbourne"})
-        interval_minutes {int} -- [interval between timepoints to collect data] (default: {0})
+        bucket_name {str} -- bucket location to store metrics scraped (default: {""})
+        redshift_cluster_id {str} -- redshift cluster to scrape metrics from (default: {""})
+        num_days {int} -- number of days of data to scrape (default: {7})
+        timezone {str} -- timezone (default: {"Australia/Melbourne"})
+        interval_minutes {int} -- interval between timepoints to collect data (default: {0})
     """
     try:
         num_days_scrape = num_days  # or i could just use num_days
@@ -71,16 +71,17 @@ def scrape_redshift_metrics(bucket_name="", redshift_cluster_id="", num_days=7, 
 
 
 def get_redshift_metrics(start_time=dt.datetime(2000, 1, 1, 1, 0, 0, 0), end_time=dt.datetime(2000, 1, 1, 1, 0, 0, 0), redshift_cluster_id="", interval_minutes=0):
-    """[retrieve redshift metrics]
-
+    """Scrape redshift metrics using get_metric_statistics api call from specified start_time to end_time. \
+       It is recommended that duration interval between start_time and end_time is equal to the value provided for interval_minutes
+    
     Keyword Arguments:
-        start_time {[datetime obj]} -- [start timestamp to collect data] (default: {dt.datetime(2000, 1, 1, 1, 0, 0, 0)})
-        end_time {[datetime obj]} -- [end timestamp to collect data] (default: {dt.datetime(2000, 1, 1, 1, 0, 0, 0)})
-        redshift_cluster_id {str} -- [redshift cluster to scrape metrics from] (default: {""})
-        interval_minutes {int} -- [interval between timepoints to collect data] (default: {0})
-
+        start_time {datetime obj} -- start time to collect redshift metrics (default: {dt.datetime(2000, 1, 1, 1, 0, 0, 0)})
+        end_time {datetime obj} -- end time to collect redshift metrics (default: {dt.datetime(2000, 1, 1, 1, 0, 0, 0)})
+        redshift_cluster_id {string} -- redshift cluster id to obtain metrics from (default: {""})
+        interval_minutes {int} -- interval between timestamps to aggragate metrics to (default: {0})
+    
     Returns:
-        [float] -- [average Redshift CPU utilisation based on interval_minutes]
+        float -- Average redshift CPU utilisation from start_time to end_time obtained every interval_minutes
     """
     redshift_client = session.client("redshift")
     num_nodes = redshift_client.describe_clusters(ClusterIdentifier=redshift_cluster_id)["Clusters"][0]["NumberOfNodes"]
@@ -123,13 +124,13 @@ def get_redshift_metrics(start_time=dt.datetime(2000, 1, 1, 1, 0, 0, 0), end_tim
 
 
 def get_cfn_resource_outputs(stack_output_list=[]):
-    """[return outputs of a cloudformation stack as a dictionary]
+    """Return outputs of a cloudformation stack as a dictionary
 
     Keyword Arguments:
-        stack_output_list {list} -- [cloudformation stack outputs] (default: {[]})
+        stack_output_list {list} -- cloudformation stack outputs as a list (default: {[]})
 
     Returns:
-        [dict] -- [cloudformation stack outputs as a dictionary]
+        dict -- Cloudformation stack outputs as a dictionary
     """
     return_val = {}
 
@@ -147,18 +148,13 @@ if __name__ == "__main__":
 
     session = boto3.Session(profile_name=args.awsprofile)
     cfn_client = session.client("cloudformation")
-    cfn_outputs = get_cfn_resource_outputs(stack_output_list=cfn_client.describe_stacks(
-        StackName=cfn_stack_name)["Stacks"][0]["Outputs"])
+    cfn_outputs = get_cfn_resource_outputs(stack_output_list=cfn_client.describe_stacks(StackName=cfn_stack_name)["Stacks"][0]["Outputs"])
 
     # scrape some initial redshift mettics
-    scrape_redshift_metrics(bucket_name=cfn_outputs["MetricsBucketName"],
-                            redshift_cluster_id=cfn_outputs["RedshiftClusterId"],
-                            num_days=args.numdaystoscrape,
-                            timezone=cfn_outputs["Timezone"],
-                            interval_minutes=int(cfn_outputs["IntervalMinutes"]))
-
+    scrape_redshift_metrics(bucket_name=cfn_outputs["MetricsBucketName"], redshift_cluster_id=cfn_outputs["RedshiftClusterId"], num_days=args.numdaystoscrape, timezone=cfn_outputs["Timezone"], interval_minutes=int(cfn_outputs["IntervalMinutes"]))
+    print("Finished scraping {0} days worth of metrics data..".format(args.numdaystoscrape ))
+    
     # train forecast model for the first time model
     sfn_client = session.client("stepfunctions")
-    sfn_client.start_execution(stateMachineArn=cfn_outputs["TrainForecastModelStepFunction"],
-                               name="train_forecast_model_run_" + dt.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S"))
+    sfn_client.start_execution(stateMachineArn=cfn_outputs["TrainForecastModelStepFunction"], name="train_forecast_model_run_" + dt.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S"))
     print("Executed 'Train Forecast Model Step Function'..")

@@ -6,7 +6,7 @@ class OldForecastCleanup(ForecastBase):
 
     def old_forecast_cleanup(self):
         try:
-            forecast_jobs = self.get_forecast_jobs(dataset_group_arn=self.get_dataset_group_arn())
+            forecast_jobs = self.get_forecast_jobs()
             # cleanup old forecasts
             for i in range(0, len(forecast_jobs)):
                 if forecast_jobs[i]["ForecastArn"] != self.get_forecast_arn():
@@ -15,20 +15,17 @@ class OldForecastCleanup(ForecastBase):
         except Exception as e:
             self.logger.error("Exception: {0}".format(e))
 
-    def get_forecast_jobs(self, dataset_group_arn = ""):
-        """[returns all forecast jobs]
-        
-        Keyword Arguments:
-            dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    def get_forecast_jobs(self):
+        """Returns all forecast jobs
         
         Returns:
-            [list] -- [list of forecast jobs]
+            list -- List of forecast jobs and their details from boto3 API
         """
         response = self.forecast_client.list_forecasts(
             Filters = [
                 {
                     "Key": "DatasetGroupArn",
-                    "Value": dataset_group_arn,
+                    "Value": self.get_dataset_group_arn(),
                     "Condition": "IS"
                 }
             ]

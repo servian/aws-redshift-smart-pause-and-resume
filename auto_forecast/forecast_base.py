@@ -41,42 +41,42 @@ class ForecastBase:
         self.logger.setLevel(logging.INFO)
 
     def get_dataset_group_arn(self):
-        """returns dataset group arn
+        """Returns dataset group arn
 
         Returns:
-            [str] -- [dataset group arn]
+            string -- dataset group arn
         """
         return "arn:aws:forecast:{0}:{1}:dataset-group/{2}".format(self.REGION, self.ACCOUNT_ID, self.DATASET_GROUP_NAME)
 
     def get_dataset_arn(self):
-        """returns dataset arn
+        """Returns dataset arn
 
         Returns:
-            [str] -- [dataset arn]
+            string -- dataset arn
         """
         return "arn:aws:forecast:{0}:{1}:dataset/{2}".format(self.REGION, self.ACCOUNT_ID, self.DATASET_NAME)
 
     def get_dataset_import_job_arn(self):
-        """returns dataset import job arn
+        """Returns dataset import job arn
 
         Returns:
-            [str] -- [dataset import job arn]
+            string -- dataset import job arn
         """
         return "arn:aws:forecast:{0}:{1}:dataset-import-job/{2}/{3}".format(self.REGION, self.ACCOUNT_ID, self.DATASET_NAME, self.DATASET_IMPORT_JOB_NAME)
 
     def get_predictor_arn(self):
-        """returns dataset predictor job arn
+        """Returns dataset predictor job arn
 
         Returns:
-            [str] -- [dataset predictor job arn]
+            string -- dataset predictor job arn
         """
         return "arn:aws:forecast:{0}:{1}:predictor/{2}".format(self.REGION, self.ACCOUNT_ID, self.PREDICTOR_NAME)
     
     def get_forecast_arn(self):
-        """returns dataset predictor job arn
+        """Returns dataset predictor job arn
 
         Returns:
-            [str] -- [dataset predictor job arn]
+            string -- dataset predictor job arn
         """
         return "arn:aws:forecast:{0}:{1}:forecast/{2}".format(self.REGION, self.ACCOUNT_ID, self.FORECAST_NAME)
     
@@ -84,12 +84,12 @@ class ForecastBase:
         """Commence an action based on the status of a resource
         
         Keyword Arguments:
-            status {str} -- [current resource status] (default: {""})
-            resource_arn {str} -- [resource arn] (default: {""})
+            status {string} -- current resource status (default: {""})
+            resource_arn {string} -- resource arn (default: {""})
         
         Raises:
-            ResourceInFailedStateException: [description]
-            ResourceCreateInProgressException: [description]
+            ResourceInFailedStateException: custom exception
+            ResourceCreateInProgressException: custom exception
         """
         if status.find("ACTIVE") != -1: 
             self.logger.info("Resource {0} has STATUS:ACTIVE".format(resource_arn))

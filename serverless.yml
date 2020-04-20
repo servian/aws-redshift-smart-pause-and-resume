@@ -70,7 +70,7 @@ package:
 functions:
   ResumeRedshift:
     handler: resume_redshift.handler
-    module: auto_schedule
+    module: auto_redshift
     name: ${self:service}-resume-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
@@ -89,7 +89,7 @@ functions:
 
   PauseRedshift:
     handler: pause_redshift.handler
-    module: auto_schedule
+    module: auto_redshift
     name: ${self:service}-pause-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
@@ -131,7 +131,7 @@ functions:
         Resource: "*"
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
   
@@ -157,7 +157,7 @@ functions:
         Resource: ${self:custom.redshiftclusterarn}
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_forecast/**
 
@@ -169,7 +169,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
     
@@ -181,7 +181,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -193,7 +193,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -205,7 +205,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
   
@@ -217,7 +217,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -229,7 +229,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -241,7 +241,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -253,7 +253,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -265,7 +265,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -277,7 +277,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
 
@@ -289,7 +289,7 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
   
@@ -318,7 +318,7 @@ functions:
           timezone: ${self:custom.timezone}
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_forecast/**
         - auto_scrape/**
 
@@ -347,7 +347,7 @@ functions:
           timezone: ${self:custom.timezone}
     package:
       exclude:
-        - auto_schedule/**
+        - auto_redshift/**
         - auto_forecast/**
         - auto_scrape/**
 

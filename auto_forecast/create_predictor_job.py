@@ -6,7 +6,7 @@ class CreatePredictorJob(ForecastBase):
         super().__init__(context)
         self.ENABLE_AUTOML_BOOL = False
 
-    def lambda_handler(self):
+    def create_predictor_job(self):
         try:
             if self.ENABLE_AUTOML == "true":
                 self.ALGORITHM_ARN = ""
@@ -40,4 +40,4 @@ def handler(event, context):
     # instantiate class
     createPredictorJob = CreatePredictorJob(context)
     # run function
-    createPredictorJob.lambda_handler()
+    createPredictorJob.create_predictor_job()

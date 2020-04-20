@@ -6,7 +6,7 @@ class OldDatasetImportCleanup(ForecastBase):
 
     def old_dataset_import_cleanup(self):
         try:
-            dataset_import_jobs =  self.get_dataset_import_jobs(dataset_arn=self.get_dataset_arn())
+            dataset_import_jobs =  self.get_dataset_import_jobs()
             # cleanup old predictors
             for i in range(0, len(dataset_import_jobs)):
                 if dataset_import_jobs[i]["DatasetImportJobArn"] != self.get_dataset_import_job_arn():
@@ -15,20 +15,17 @@ class OldDatasetImportCleanup(ForecastBase):
         except Exception as e:
             self.logger.error("Exception: {0}".format(e))
 
-    def get_dataset_import_jobs(self, dataset_arn = ""):
-        """[returns all dataset import jobs in a dataset arn]
-        
-        Keyword Arguments:
-            dataset_arn {str} -- [dataset arn] (default: {""})
+    def get_dataset_import_jobs(self):
+        """Returns all dataset import jobs in a dataset arn
         
         Returns:
-            [list] -- [list of dataset import jobs]
+            list -- List of dataset import jobs and their details from boto3 API
         """
         import_jobs = self.forecast_client.list_dataset_import_jobs(
             Filters = [
                 {
                     "Key": "DatasetArn",
-                    "Value": dataset_arn,
+                    "Value": self.get_dataset_arn(),
                     "Condition": "IS"
                 }
             ]

@@ -9,13 +9,13 @@ class CheckPredictorJobStatus(ForecastBase):
         self.ActionBasedOnStatus(status=predictor_status, resource_arn=self.get_predictor_arn())
         
     def get_predictor_status(self, predictor_arn=""):
-        """[returns the status of the predictor job]
+        """Returns the status of the predictor job
         
         Keyword Arguments:
-            predictor_arn {str} -- [resource arn] (default: {""})
+            predictor_arn {string} -- Predictor ARN (default: {""})
         
         Returns:
-            [str] -- [the current status of the predictor job]
+            string -- The current status of the predictor job
         """
         response = self.forecast_client.describe_predictor(PredictorArn=predictor_arn)
         return response["Status"]    

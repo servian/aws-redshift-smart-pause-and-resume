@@ -9,13 +9,13 @@ class CheckForecastJobStatus(ForecastBase):
         self.ActionBasedOnStatus(status=forecast_status, resource_arn=self.get_forecast_arn())
         
     def get_forecast_status(self, forecast_arn=""):
-        """[returns the status of the forecast job]
+        """Returns the status of the forecast job
         
         Keyword Arguments:
-            forecast_arn {str} -- [resource arn] (default: {""})
+            forecast_arn {string} -- Forecast job ARN (default: {""})
         
         Returns:
-            [str] -- [the current status of the forecast job]
+            string -- The current status of the forecast job
         """
         response = self.forecast_client.describe_forecast(ForecastArn=forecast_arn)
         return response["Status"]    

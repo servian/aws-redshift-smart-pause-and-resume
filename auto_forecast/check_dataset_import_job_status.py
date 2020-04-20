@@ -9,13 +9,13 @@ class CheckDatasetImportJobStatus(ForecastBase):
         self.ActionBasedOnStatus(status=import_job_status, resource_arn=self.get_dataset_import_job_arn())
         
     def get_dataset_import_status(self, dataset_import_job_arn=""):
-        """[returns the status of the dataset import job]
+        """Returns the status of the dataset import job
         
         Keyword Arguments:
-            dataset_import_job_arn {str} -- [resource arn] (default: {""})
+            dataset_import_job_arn {string} -- Dataset Import Job ARN (default: {""})
         
         Returns:
-            [str] -- [the current status of the import job]
+            string -- The current status of the dataset import job
         """
         response = self.forecast_client.describe_dataset_import_job(DatasetImportJobArn=dataset_import_job_arn)
         return response["Status"]
