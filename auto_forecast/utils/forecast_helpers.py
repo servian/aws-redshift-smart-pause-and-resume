@@ -1,34 +1,17 @@
 import boto3
-
-def derive_dataset_group_arn(dataset_group_name = "", lambda_function_arn = ""):
-    account_id = lambda_function_arn.split(":")[4]
-    region = lambda_function_arn.split(":")[3]
-    
-    return "arn:aws:forecast:{0}:{1}:dataset-group/{2}".format(region, account_id, dataset_group_name)
-
-
-def derive_dataset_arn(dataset_name = "", lambda_function_arn = ""):
-    account_id = lambda_function_arn.split(":")[4]
-    region = lambda_function_arn.split(":")[3]
-    
-    return "arn:aws:forecast:{0}:{1}:dataset/{2}".format(region, account_id, dataset_name)
-
-
-def derive_dataset_import_job_arn(dataset_name = "", dataset_import_job_name = "", lambda_function_arn = ""):
-    account_id = lambda_function_arn.split(":")[4]
-    region = lambda_function_arn.split(":")[3]
-    
-    return "arn:aws:forecast:{0}:{1}:dataset-import-job/{2}/{3}".format(region, account_id, dataset_name, dataset_import_job_name) 
-
-
-def derive_predictor_arn(predictor_name = "", lambda_function_arn = ""):
-    account_id = lambda_function_arn.split(":")[4]
-    region = lambda_function_arn.split(":")[3]
-    
-    return "arn:aws:forecast:{0}:{1}:predictor/{2}".format(region, account_id, predictor_name)
-
+# see boto3 documentation for more details on list objects: 
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecast.html
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecastquery.html#ForecastQueryService.Client.query_forecast
 
 def get_dataset_import_jobs(dataset_arn = ""):
+    """[returns all dataset import jobs in a dataset arn]
+    
+    Keyword Arguments:
+        dataset_arn {str} -- [dataset arn] (default: {""})
+    
+    Returns:
+        [list] -- [list of dataset import jobs]
+    """
     forecast_client = boto3.client("forecast")
     import_jobs = forecast_client.list_dataset_import_jobs(
         Filters = [
@@ -44,6 +27,14 @@ def get_dataset_import_jobs(dataset_arn = ""):
 
 
 def get_latest_dataset_import_job_arn(dataset_arn = ""):
+    """[returns the latest dataset import job arn]
+    
+    Keyword Arguments:
+        dataset_arn {str} -- [dataset arn] (default: {""})
+    
+    Returns:
+        [str] -- [latest dataset import job arn]
+    """
     import_jobs = get_dataset_import_jobs(dataset_arn)
     latest_import_job = import_jobs[0]
     
@@ -55,7 +46,14 @@ def get_latest_dataset_import_job_arn(dataset_arn = ""):
 
 
 def get_predictor_jobs(dataset_group_arn = ""):
-    """returns a list of all predictor jobs regardless of STATUS"""
+    """[returns all dataset import jobs in a dataset arn]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [list] -- [list of predictor jobs]
+    """
     forecast_client = boto3.client("forecast")
     response = forecast_client.list_predictors(
         Filters = [
@@ -71,7 +69,14 @@ def get_predictor_jobs(dataset_group_arn = ""):
     
 
 def get_latest_predictor_job_arn(dataset_group_arn = ""):
-    """returns a the latest predictor job regardless of STATUS"""
+    """[returns the latest predictor job arn]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [str] -- [predictor job arn]
+    """
     predictor_jobs = get_predictor_jobs(dataset_group_arn)
     latest_predictor_job = predictor_jobs[0]
     
@@ -83,7 +88,14 @@ def get_latest_predictor_job_arn(dataset_group_arn = ""):
 
 
 def get_active_predictor_jobs(dataset_group_arn = ""):
-    """returns a list of all predictor jobs with STATUS=ACTIVE"""
+    """[returns all active dataset predictor jobs]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [list] -- [list of active predictor jobs]
+    """
     predictor_jobs = get_predictor_jobs(dataset_group_arn)
     
     for i in range(0, len(predictor_jobs)):
@@ -94,7 +106,14 @@ def get_active_predictor_jobs(dataset_group_arn = ""):
 
 
 def get_latest_active_predictor_job_arn(dataset_group_arn = ""):
-    """returns a the latest predictor job with STATUS=ACTIVE"""
+    """[returns the latest active predictor job arn]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [str] -- [latest active predictor job arn]
+    """
     actv_predictors = get_active_predictor_jobs(dataset_group_arn)
     latest_predictor_job = actv_predictors[0]
     
@@ -106,6 +125,15 @@ def get_latest_active_predictor_job_arn(dataset_group_arn = ""):
 
 
 def get_forecast_values(forcast_arn = "", item_filter_value = ""):
+    """[retrieves the forecast values of an item based on specified forecast job]
+    
+    Keyword Arguments:
+        forcast_arn {str} -- [forecast arn] (default: {""})
+        item_filter_value {str} -- [item filter] (default: {""})
+    
+    Returns:
+        [dict] -- [resulting forecast result]
+    """
     forecast_query_client = boto3.client("forecastquery")
     response = forecast_query_client.query_forecast(
         ForecastArn = forcast_arn,
@@ -118,7 +146,14 @@ def get_forecast_values(forcast_arn = "", item_filter_value = ""):
 
 
 def get_forecast_jobs(dataset_group_arn = ""):
-    """returns a list of all forecast jobs regardless of STATUS"""
+    """[returns all forecast jobs]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [list] -- [list of forecast jobs]
+    """
     forecast_client = boto3.client("forecast")
     response = forecast_client.list_forecasts(
         Filters = [
@@ -134,7 +169,14 @@ def get_forecast_jobs(dataset_group_arn = ""):
     
 
 def get_latest_forecast_job_arn(dataset_group_arn = ""):
-    """returns a the latest forecast job regardless of STATUS"""
+    """[returns the latest forecast job arn]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [str] -- [latest forecast job arn]
+    """
     forecast_jobs = get_forecast_jobs(dataset_group_arn)
     latest_forecast_job = forecast_jobs[0]
     
@@ -146,7 +188,14 @@ def get_latest_forecast_job_arn(dataset_group_arn = ""):
   
 
 def get_active_forecast_jobs(dataset_group_arn = ""):
-    """returns a list of all forecast jobs with STATUS=ACTIVE"""
+    """[returns all active forecast jobs]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [list] -- [list of active forecast jobs]
+    """
     forecast_jobs = get_forecast_jobs(dataset_group_arn)
     
     for i in range(0, len(forecast_jobs)):
@@ -157,7 +206,14 @@ def get_active_forecast_jobs(dataset_group_arn = ""):
 
 
 def get_latest_active_forecast_job_arn(dataset_group_arn = ""):
-    """returns a the latest forecast job with STATUS=ACTIVE"""
+    """[returns latest active forecast job arn]
+    
+    Keyword Arguments:
+        dataset_group_arn {str} -- [dataset group arn] (default: {""})
+    
+    Returns:
+        [str] -- [latest active forecast job arn]
+    """
     actv_forecasts = get_active_forecast_jobs(dataset_group_arn)
     latest_forecast_job = actv_forecasts[0]
     

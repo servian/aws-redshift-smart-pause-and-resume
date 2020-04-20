@@ -1,29 +1,44 @@
-import json
-import boto3
-import os
-import logging
+from forecast_base import ForecastBase
 
-from utils.forecast_helpers import derive_dataset_group_arn
-from utils.forecast_helpers import get_latest_active_forecast_job_arn
-from utils.forecast_helpers import get_active_forecast_jobs
+class OldForecastCleanup(ForecastBase):
+    def __init__(self, context):
+        super().__init__(context)
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+    def old_forecast_cleanup(self):
+        try:
+            forecast_jobs = self.get_forecast_jobs(dataset_group_arn=self.get_dataset_group_arn())
+            # cleanup old forecasts
+            for i in range(0, len(forecast_jobs)):
+                if forecast_jobs[i]["ForecastArn"] != self.get_forecast_arn():
+                    self.forecast_client.delete_forecast(ForecastArn = forecast_jobs[i]["ForecastArn"])
+                    self.logger.info("Initialised delete forecast job: {0}".format(forecast_jobs[i]["ForecastArn"]))
+        except Exception as e:
+            self.logger.error("Exception: {0}".format(e))
+
+    def get_forecast_jobs(self, dataset_group_arn = ""):
+        """[returns all forecast jobs]
+        
+        Keyword Arguments:
+            dataset_group_arn {str} -- [dataset group arn] (default: {""})
+        
+        Returns:
+            [list] -- [list of forecast jobs]
+        """
+        response = self.forecast_client.list_forecasts(
+            Filters = [
+                {
+                    "Key": "DatasetGroupArn",
+                    "Value": dataset_group_arn,
+                    "Condition": "IS"
+                }
+            ]
+        )
+        
+        return response["Forecasts"]
+
 
 def handler(event, context):
-    DATASET_GROUP_NAME = os.environ["DATASET_GROUP_NAME"]
-    DATASET_GROUP_ARN = derive_dataset_group_arn(dataset_group_name = DATASET_GROUP_NAME, lambda_function_arn = context.invoked_function_arn)
-    
-    try:
-        actv_forecasts = get_active_forecast_jobs(dataset_group_arn = DATASET_GROUP_ARN)
-        latest_forecast_job_arn = get_latest_active_forecast_job_arn(dataset_group_arn = DATASET_GROUP_ARN)
-        
-        # cleanup old forecasts
-        forecast_client = boto3.client("forecast")
-        for i in range(0, len(actv_forecasts)):
-            if actv_forecasts[i]["ForecastArn"] != latest_forecast_job_arn:
-                forecast_client.delete_forecast(ForecastArn = actv_forecasts[i]["ForecastArn"])
-                logger.info("initialised delete forecast job: {0}".format(actv_forecasts[i]["ForecastArn"]))
-    except Exception as e:
-        logger.info("Exception: {0}".format(e))
-    
+    # instantiate class
+    oldForecastCleanup = OldForecastCleanup(context)
+    # run function
+    oldForecastCleanup.old_forecast_cleanup()

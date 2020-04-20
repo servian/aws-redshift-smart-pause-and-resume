@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "dependencies": {},
   "devDependencies": {
+    "prettier": "2.0.4",
     "serverless-iam-roles-per-function": "^2.0.2",
     "serverless-local-schedule": "^0.1.6",
     "serverless-pseudo-parameters": "^2.5.0",

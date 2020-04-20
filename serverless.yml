@@ -1,4 +1,5 @@
-service: smart-sched
+service: 
+  name: ${opt:servicename, "smart-sched"}
 
 custom:
   log_level: INFO 
@@ -17,14 +18,11 @@ custom:
     slim: true
   # cli options variables 
   redshiftclusterid: ${opt:redshiftclusterid}
-  datasetname: ${opt:datasetname}
   algorithmarn: ${opt:algorithmarn, "arn:aws:forecast:::algorithm/Deep_AR_Plus"}
   enableautoml: ${opt:enableautoml, "DISABLED"} # possible values are ENABLED or DISABLED
   timezone: ${opt:timezone, "Australia/Melbourne"}
   intervalminutes: ${opt:intervalminutes, "15"}
   # custom service wide variables 
-  datasetsuffix: _dataset_${self:provider.stage} 
-  datasetgroupsuffix: _dataset_group_${self:provider.stage}
   datasetdomain: CUSTOM
   redshiftclusterarn: "arn:aws:redshift:#{AWS::Region}:#{AWS::AccountId}:cluster:${self:custom.redshiftclusterid}" # depends on input above
   resumeredshifteventname: ${self:service}-resume-redshift-event-${self:provider.stage}
@@ -40,7 +38,6 @@ provider:
   stage: ${opt:stage, "dev"} # Override via CLI "--stage dev"
   region: ${self:custom.region}
   stackName: ${self:service}-${self:provider.stage}
-  iamRoleStatementsName: ${self:service}-${self:provider.stage}-Generic-lambdaRole
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -51,12 +48,15 @@ provider:
         - "iam:PassRole"
       Resource: "#{ForecastRole.Arn}"
   environment: 
-    DATASET_NAME: sched_${self:custom.datasetname}${self:custom.datasetsuffix} # format: sched_{redshiftclusterid}_dataset_{stage}
-    DATASET_GROUP_NAME: sched_${self:custom.datasetname}${self:custom.datasetgroupsuffix} # format: sched_{redshiftclusterid}_dataset_group_{stage}
     DATASET_DOMAIN: ${self:custom.datasetdomain}
-    REDSHIFT_CLUSTER_ID: ${self:custom.redshiftclusterid} 
+    DATASET_TYPE: TARGET_TIME_SERIES
     TIMEZONE: ${self:custom.timezone}
     INTERVAL_MINUTES: ${self:custom.intervalminutes}
+    ALGORITHM_ARN: ${self:custom.algorithmarn}
+    ENABLE_AUTOML: ${self:custom.automl.${self:custom.enableautoml}, ${self:custom.automl.default}}
+    BUCKET_NAME: "#{MetricsBucket}"
+    FORECAST_ROLE_ARN: "#{ForecastRole.Arn}" 
+    REDSHIFT_CLUSTER_ID: ${self:custom.redshiftclusterid} 
   stackTags:
     environment: ${self:provider.stage}
     owner: "owner"
@@ -70,7 +70,7 @@ package:
 functions:
   ResumeRedshift:
     handler: resume_redshift.handler
-    module: auto_redshift
+    module: auto_schedule
     name: ${self:service}-resume-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
@@ -85,10 +85,11 @@ functions:
       exclude:
         - auto_forecast/**
         - auto_trigger/**
+        - auto_scrape/**
 
   PauseRedshift:
     handler: pause_redshift.handler
-    module: auto_redshift
+    module: auto_schedule
     name: ${self:service}-pause-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
@@ -103,6 +104,7 @@ functions:
       exclude:
         - auto_forecast/**
         - auto_trigger/**
+        - auto_scrape/**
 
   ScheduleRedshift:
     handler: schedule_redshift.handler
@@ -110,11 +112,11 @@ functions:
     name: ${self:service}-schedule-redshift-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    environment:
+    environment: 
+      THRESHOLD: 5
+      CLOUDWATCH_EVENT_ROLE_ARN: "#{CloudwatchEventRole.Arn}"
       RESUME_LAMBDA_ARN: "#{ResumeRedshiftLambdaFunction.Arn}" 
       PAUSE_LAMBDA_ARN: "#{PauseRedshiftLambdaFunction.Arn}"
-      CLOUDWATCH_EVENT_ROLE_ARN: "#{CloudwatchEventRole.Arn}"
-      THRESHOLD: 5
       RESUME_REDSHIFT_EVENT_NAME: ${self:custom.resumeredshifteventname}
       PAUSE_REDSHIFT_EVENT_NAME: ${self:custom.pauseredshifteventname}
     iamRoleStatementsName: ${self:service}-${self:provider.stage}-ScheduleRedshift-lambdaRole
@@ -129,17 +131,16 @@ functions:
         Resource: "*"
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
   
   ScrapeRedshiftMetrics: 
     handler: scrape_redshift_metrics.handler
-    module: auto_forecast
+    module: auto_scrape
     name: ${self:service}-scrape-redshift-metrics-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    environment:
-      BUCKET_NAME: "#{MetricsBucket}"
     iamRoleStatementsName: ${self:service}-${self:provider.stage}-ScrapeRedshiftMetrics-lambdaRole
     iamRoleStatements:
       - Effect: Allow
@@ -156,8 +157,9 @@ functions:
         Resource: ${self:custom.redshiftclusterarn}
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_forecast/**
 
   CreateDataset:
     handler: create_dataset.handler
@@ -165,12 +167,11 @@ functions:
     name: ${self:service}-create-dataset-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    environment:
-      DATASET_TYPE: TARGET_TIME_SERIES
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
     
   CreateDatasetGroup:
     handler: create_dataset_group.handler
@@ -180,8 +181,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   CreateDatasetImportJob:
     handler: create_dataset_import_job.handler
@@ -189,13 +191,11 @@ functions:
     name: ${self:service}-create-dataset-import-job-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    environment:
-      BUCKET_NAME: "#{MetricsBucket}" 
-      FORECAST_ROLE_ARN: "#{ForecastRole.Arn}"
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   CheckDatasetImportJobStatus:
     handler: check_dataset_import_job_status.handler
@@ -205,8 +205,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
   
   CreatePredictorJob:
     handler: create_predictor_job.handler
@@ -214,13 +215,11 @@ functions:
     name: ${self:service}-create-predictor-job-${self:provider.stage}
     memorySize: 256
     timeout: 60
-    environment:
-      ALGORITHM_ARN: ${self:custom.algorithmarn}
-      ENABLE_AUTOML: ${self:custom.automl.${self:custom.enableautoml}, ${self:custom.automl.default}}
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   CheckPredictorJobStatus:
     handler: check_predictor_job_status.handler
@@ -230,8 +229,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   CreateForecastJob:
     handler: create_forecast_job.handler
@@ -241,8 +241,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   CheckForecastJobStatus:
     handler: check_forecast_job_status.handler
@@ -252,8 +253,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   OldPredictorCleanup:
     handler: old_predictor_cleanup.handler
@@ -263,8 +265,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   OldForecastCleanup:
     handler: old_forecast_cleanup.handler
@@ -274,8 +277,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
 
   OldDatasetImportCleanup:
     handler: old_dataset_import_cleanup.handler
@@ -285,8 +289,9 @@ functions:
     timeout: 60
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_trigger/**
+        - auto_scrape/**
   
   TriggerGenerateForecasts:
     handler: trigger_generate_forecasts_step_function.handler
@@ -313,8 +318,9 @@ functions:
           timezone: ${self:custom.timezone}
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_forecast/**
+        - auto_scrape/**
 
   TriggerTrainModel: 
     handler: trigger_train_forecast_model_step_function.handler
@@ -341,8 +347,9 @@ functions:
           timezone: ${self:custom.timezone}
     package:
       exclude:
-        - auto_redshift/**
+        - auto_schedule/**
         - auto_forecast/**
+        - auto_scrape/**
 
 resources:
   Resources:

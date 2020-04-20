@@ -1,28 +1,43 @@
-import json
-import boto3
-import os
-import logging
+from forecast_base import ForecastBase
 
-from utils.forecast_helpers import derive_dataset_arn
-from utils.forecast_helpers import get_latest_dataset_import_job_arn
-from utils.forecast_helpers import get_dataset_import_jobs
+class OldDatasetImportCleanup(ForecastBase):
+    def __init__(self, context):
+        super().__init__(context)
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+    def old_dataset_import_cleanup(self):
+        try:
+            dataset_import_jobs =  self.get_dataset_import_jobs(dataset_arn=self.get_dataset_arn())
+            # cleanup old predictors
+            for i in range(0, len(dataset_import_jobs)):
+                if dataset_import_jobs[i]["DatasetImportJobArn"] != self.get_dataset_import_job_arn():
+                    self.forecast_client.delete_dataset_import_job(DatasetImportJobArn=dataset_import_jobs[i]["DatasetImportJobArn"])
+                    self.logger.info("Initialised delete dataset import job: {0}".format(dataset_import_jobs[i]["DatasetImportJobArn"]))
+        except Exception as e:
+            self.logger.error("Exception: {0}".format(e))
+
+    def get_dataset_import_jobs(self, dataset_arn = ""):
+        """[returns all dataset import jobs in a dataset arn]
+        
+        Keyword Arguments:
+            dataset_arn {str} -- [dataset arn] (default: {""})
+        
+        Returns:
+            [list] -- [list of dataset import jobs]
+        """
+        import_jobs = self.forecast_client.list_dataset_import_jobs(
+            Filters = [
+                {
+                    "Key": "DatasetArn",
+                    "Value": dataset_arn,
+                    "Condition": "IS"
+                }
+            ]
+        )
+        
+        return import_jobs["DatasetImportJobs"]
 
 def handler(event, context):
-    DATASET_NAME = os.environ["DATASET_NAME"]    
-    DATASET_ARN = derive_dataset_arn(dataset_name = DATASET_NAME, lambda_function_arn = context.invoked_function_arn)
-    
-    try:
-        dataset_import_jobs =  get_dataset_import_jobs(dataset_arn = DATASET_ARN)
-        latest_dataset_import_job_arn = get_latest_dataset_import_job_arn(dataset_arn = DATASET_ARN)
-        
-        # cleanup old predictors
-        forecast_client = boto3.client("forecast")
-        for i in range(0, len(dataset_import_jobs)):
-            if dataset_import_jobs[i]["DatasetImportJobArn"] != latest_dataset_import_job_arn:
-                forecast_client.delete_dataset_import_job(DatasetImportJobArn = dataset_import_jobs[i]["DatasetImportJobArn"])
-                logger.info("initialised delete dataset import job: {0}".format(dataset_import_jobs[i]["DatasetImportJobArn"]))
-    except Exception as e:
-        logger.info("Exception: {0}".format(e))
+    # instantiate class
+    oldDatasetImportCleanup = OldDatasetImportCleanup(context)
+    # run function
+    oldDatasetImportCleanup.old_dataset_import_cleanup()

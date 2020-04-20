@@ -17,5 +17,5 @@ def handler(event, context):
             name = "train_forecast_model_run_" + dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         )
     except Exception as e:
-        logger.info("Exception: {0}".format(e))
+        logger.error("Exception: {0}".format(e))
         

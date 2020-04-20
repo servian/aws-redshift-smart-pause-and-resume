@@ -19,5 +19,5 @@ def handler(event, context):
         else:
             logger.info("redshift cluster {0} is in a {1} state. cannot resume cluster".format(REDSHIFT_CLUSTER_ID, response["Clusters"][0]["ClusterAvailabilityStatus"]))
     except Exception as e:
-        logger.info("Exception: {0}".format(e))
+        logger.error("Exception: {0}".format(e))
         
