@@ -14,41 +14,66 @@ class ScheduleRedshift(ForecastBase):
         self.THRESHOLD = float(os.environ["THRESHOLD"])
         self.RESUME_REDSHIFT_EVENT_NAME = os.environ["RESUME_REDSHIFT_EVENT_NAME"]
         self.PAUSE_REDSHIFT_EVENT_NAME = os.environ["PAUSE_REDSHIFT_EVENT_NAME"]
+        
+        self.current_ts_utc = dt.datetime.utcnow().replace(tzinfo=tz.gettz("UTC")) # current timestamp in utc
+        self.current_ts_local = self.current_ts_utc.astimezone(tz.gettz(self.TIMEZONE)) # current timestamp in local time based on timezone
+        self.resume_scheduled = False
+        self.pause_scheduled = False
+        self.resume_ts_utc = self.current_ts_utc # placeholder
+        self.pause_ts_utc = self.current_ts_utc # placeholder
 
     def schedule_redshift(self):
-        current_ts_utc = dt.datetime.utcnow().replace(tzinfo=tz.gettz("UTC")) # current timestamp in utc
-        resume_scheduled = False
-        pause_scheduled = False
-        
         try:
             forecasts = self.get_forecast_values(forcast_arn=self.get_forecast_arn(), item_filter_value=self.REDSHIFT_CLUSTER_ID)
-            for item in forecasts["Forecast"]["Predictions"]["mean"]:
-                item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")
-                item_ts_local  = item_ts_local.astimezone(tz.gettz(self.TIMEZONE)) # add timezone to timestamp
-                item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC")) # convert time to UTC, use this to schedule
-                
-                if item["Value"] > self.THRESHOLD and resume_scheduled == False and item_ts_utc > current_ts_utc:
-                    resume_ts_utc = item_ts_local - dt.timedelta(minutes = 30) # resume redshift earlier
-                    self.schedule_event(event_name = self.RESUME_REDSHIFT_EVENT_NAME, target_arn = self.RESUME_LAMBDA_ARN, event_role_arn = self.CLOUDWATCH_EVENT_ROLE_ARN, minute = resume_ts_utc.minute, hour = resume_ts_utc.hour)
-                    self.logger.info("Scheduled {0} to resume on {1} UTC".format(self.REDSHIFT_CLUSTER_ID, resume_ts_utc.strptime("%Y-%m-%dT%H:%M:%S")))
-                    resume_scheduled == True
-                    
-                elif item["Value"] < self.THRESHOLD and pause_scheduled == False:
-                    if  resume_scheduled == True and item_ts_utc > resume_ts_utc + dt.timedelta(hours = 2): # assign when resume is scheduled and let redshift be resumed for at least 2 hours
-                        pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
-                        self.schedule_event(event_name = self.PAUSE_REDSHIFT_EVENT_NAME, target_arn = self.PAUSE_LAMBDA_ARN, event_role_arn = self.CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
-                        self.logger.info("Scheduled {0} to pause on {1} UTC".format(self.REDSHIFT_CLUSTER_ID, pause_ts_utc.strptime("%Y-%m-%dT%H:%M:%S")))
-                        pause_scheduled == True
-                        
-                    elif resume_scheduled == False: # assign when resume is not scheduled. i.e., cluster was resumed manually
-                        pause_ts_utc = item_ts_local + dt.timedelta(minutes = 30) # pause reshift later
-                        self.schedule_event(event_name = self.PAUSE_REDSHIFT_EVENT_NAME, target_arn = self.PAUSE_LAMBDA_ARN, event_role_arn = self.CLOUDWATCH_EVENT_ROLE_ARN, minute = pause_ts_utc.minute, hour = pause_ts_utc.hour)        
-                        self.logger.info("Scheduled {0} to pause on {1} UTC".format(self.REDSHIFT_CLUSTER_ID, pause_ts_utc.strptime("%Y-%m-%dT%H:%M:%S")))
-                        pause_scheduled == True
-                        
-                        
+            
+            self.schedule_resume(forecasts=forecasts["Forecast"]["Predictions"]["mean"])
+            self.schedule_pause(forecasts=forecasts["Forecast"]["Predictions"]["mean"])  
+            
         except Exception as e:
             self.logger.error("Exception: {0}".format(e))
+            
+    def schedule_resume(self, forecasts = []):
+        for item in forecasts:
+            item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")    # timestamp from forecast
+            item_ts_local  = item_ts_local.replace(tzinfo=tz.gettz(self.TIMEZONE))          # add timezone to timestamp
+            item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC"))                         # convert time to UTC, use this to schedule
+            ts_diff_utc = item_ts_utc - self.current_ts_utc                                 # schedule event after current timestamp
+            
+            if item["Value"] > self.THRESHOLD and self.resume_scheduled == False and ts_diff_utc.total_seconds() >= 0: 
+                resume_ts_utc = item_ts_utc - dt.timedelta(minutes = 30)                    # resume redshift earlier
+                self.resume_scheduled = True
+        
+        if self.resume_scheduled:
+            self.schedule_event(event_name=self.RESUME_REDSHIFT_EVENT_NAME, target_arn=self.RESUME_LAMBDA_ARN, event_role_arn=self.CLOUDWATCH_EVENT_ROLE_ARN, minute=resume_ts_utc.minute, hour=resume_ts_utc.hour)
+            self.logger.info("Scheduled {0} to resume on {1} UTC".format(self.REDSHIFT_CLUSTER_ID, resume_ts_utc.strftime("%Y-%m-%dT%H:%M:%S")))
+        else:
+            self.logger.info("No Scheduled to resume on {0}".format(self.REDSHIFT_CLUSTER_ID))
+            
+            
+    def schedule_pause(self, forecasts = []):
+        for item in forecasts:
+            item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")    # timestamp from forecast
+            item_ts_local  = item_ts_local.replace(tzinfo=tz.gettz(self.TIMEZONE))          # add timezone to timestamp
+            item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC"))                         # convert time to UTC, use this to schedule
+            ts_diff_utc = item_ts_utc - self.current_ts_utc                                 # schedule event after current timestamp
+
+            if item["Value"] < self.THRESHOLD and self.pause_scheduled == False and ts_diff_utc.total_seconds() >= 0:
+                ts_diff_utc = item_ts_utc - self.resume_ts_utc + dt.timedelta(hours = 2)    # schedule event after two hours of resuming redshift
+                
+                if  self.resume_scheduled == True and ts_diff_utc.total_seconds() >= 0:     # assign when resume is scheduled and let redshift be resumed for at least 2 hours
+                    pause_ts_utc = item_ts_utc + dt.timedelta(minutes = 30)                 # pause reshift later
+                    self.pause_scheduled = True
+                    
+                elif self.resume_scheduled == False:                                        # assign when resume is not scheduled. i.e., cluster was resumed manually
+                    pause_ts_utc = item_ts_utc + dt.timedelta(minutes = 30)                 # pause reshift later
+                    self.pause_scheduled = True
+        
+        if self.pause_scheduled:
+            self.schedule_event(event_name=self.PAUSE_REDSHIFT_EVENT_NAME, target_arn=self.PAUSE_LAMBDA_ARN, event_role_arn=self.CLOUDWATCH_EVENT_ROLE_ARN, minute=pause_ts_utc.minute, hour=pause_ts_utc.hour)        
+            self.logger.info("Scheduled {0} to pause on {1} UTC".format(self.REDSHIFT_CLUSTER_ID, pause_ts_utc.strftime("%Y-%m-%dT%H:%M:%S")))
+        else:
+            self.logger.info("No Scheduled to pause on {0}".format(self.REDSHIFT_CLUSTER_ID))
+        
     
     def get_forecast_values(self, forcast_arn = "", item_filter_value = ""):
         """[retrieves the forecast values of an item based on specified forecast job]
