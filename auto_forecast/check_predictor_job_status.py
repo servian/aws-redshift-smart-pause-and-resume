@@ -6,7 +6,7 @@ class CheckPredictorJobStatus(ForecastBase):
 
     def check_predictor_job_status(self):
         predictor_status = self.get_predictor_status(predictor_arn=self.get_predictor_arn()) 
-        self.ActionBasedOnStatus(status=predictor_status, resource_arn=self.get_predictor_arn())
+        self.action_based_on_status(status=predictor_status, resource_arn=self.get_predictor_arn())
         
     def get_predictor_status(self, predictor_arn=""):
         """Returns the status of the predictor job

@@ -6,7 +6,7 @@ class CheckDatasetImportJobStatus(ForecastBase):
 
     def check_dataset_import_job_status(self):
         import_job_status = self.get_dataset_import_status(dataset_import_job_arn=self.get_dataset_import_job_arn()) 
-        self.ActionBasedOnStatus(status=import_job_status, resource_arn=self.get_dataset_import_job_arn())
+        self.action_based_on_status(status=import_job_status, resource_arn=self.get_dataset_import_job_arn())
         
     def get_dataset_import_status(self, dataset_import_job_arn=""):
         """Returns the status of the dataset import job

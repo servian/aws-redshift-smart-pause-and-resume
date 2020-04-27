@@ -196,7 +196,7 @@ possible values `ENABLED` or `DISABLED` (default: `DISABLED`)
 
 granularity of average Redshift CPU utilisation to use throughout stack (default: `15`)
 
-## Scraping and Training Forecast Model After Deployment
+## Scraping Data and Training Amazon Forecast Model After Deployment
 
 The following script scrapes Redshift CPU utilisation data, and uses it to initially train an Amazon Forecast Model after deploying the stack by executing the Train Forecast Model Step Function. 
 

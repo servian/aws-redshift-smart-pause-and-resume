@@ -80,7 +80,7 @@ class ForecastBase:
         """
         return "arn:aws:forecast:{0}:{1}:forecast/{2}".format(self.REGION, self.ACCOUNT_ID, self.FORECAST_NAME)
     
-    def ActionBasedOnStatus(self, status="", resource_arn=""):
+    def action_based_on_status(self, status="", resource_arn=""):
         """Commence an action based on the status of a resource
         
         Keyword Arguments:

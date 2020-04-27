@@ -6,7 +6,7 @@ class CheckForecastJobStatus(ForecastBase):
 
     def check_forecast_job_status(self):
         forecast_status = self.get_forecast_status(forecast_arn=self.get_forecast_arn())
-        self.ActionBasedOnStatus(status=forecast_status, resource_arn=self.get_forecast_arn())
+        self.action_based_on_status(status=forecast_status, resource_arn=self.get_forecast_arn())
         
     def get_forecast_status(self, forecast_arn=""):
         """Returns the status of the forecast job

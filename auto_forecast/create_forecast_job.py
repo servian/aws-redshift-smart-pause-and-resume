@@ -9,7 +9,7 @@ class CreateForecastJob(ForecastBase):
         try:
             self.forecast_client.create_forecast(
                 ForecastName=self.FORECAST_NAME,
-                PredictorArn=OldPredictorCleanup.get_latest_predictor_job_arn(),
+                PredictorArn=OldPredictorCleanup.get_latest_predictor_job_arn(dataset_group_arn=self.get_dataset_group_arn()),
                 ForecastTypes=["mean"]
             )
             self.logger.info("Initialised create forecast job successful: {0}".format(self.FORECAST_NAME))
