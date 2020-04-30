@@ -30,8 +30,8 @@ class ForecastBase:
         self.REGION = self.LAMBDA_FUNCTION_ARN.split(":")[3]
         self.ACCOUNT_ID = self.LAMBDA_FUNCTION_ARN.split(":")[4]
 
-        self.DATASET_NAME = "sched_{0}_dataset".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_")) # is based on the redshiftclusterid but instead of "-" uses "_"
-        self.DATASET_GROUP_NAME = "sched_{0}_dataset_group_name".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"))
+        self.DATASET_NAME = "{0}_dataset".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_")) # is based on the redshiftclusterid but instead of "-" uses "_"
+        self.DATASET_GROUP_NAME = "{0}_dataset_group_name".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"))
         self.DATASET_IMPORT_JOB_NAME = "{0}_import{1}".format(self.DATASET_NAME, self.CURRENT_LOCAL_TIMESTAMP)
         self.PREDICTOR_NAME = "{0}_predictor{1}".format(self.DATASET_NAME, self.CURRENT_LOCAL_TIMESTAMP)
         self.FORECAST_NAME = "{0}_forecast{1}".format(self.DATASET_NAME, self.CURRENT_LOCAL_TIMESTAMP)

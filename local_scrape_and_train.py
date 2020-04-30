@@ -144,3 +144,4 @@ if __name__ == "__main__":
     sfn_client = session.client("stepfunctions")
     sfn_client.start_execution(stateMachineArn=cfn_outputs["TrainForecastModelStepFunction"], name="train_forecast_model_run_" + dt.datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S"))
     print("Executed 'Train Forecast Model Step Function'..")
+    

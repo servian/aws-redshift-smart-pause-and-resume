@@ -201,7 +201,7 @@ granularity of average Redshift CPU utilisation to use throughout stack (default
 The following script scrapes Redshift CPU utilisation data, and uses it to initially train an Amazon Forecast Model after deploying the stack by executing the Train Forecast Model Step Function. 
 
 ```bash
-python3 local_scrape_and_train.py 
+python3 local_scrape_and_train.py \
 [--awsprofile <value>] \
 [--numdaystoscrape <value>] \
 [--cfnstackname  <value>] \ # value must be consitent with servicename from Deploy Step 6
