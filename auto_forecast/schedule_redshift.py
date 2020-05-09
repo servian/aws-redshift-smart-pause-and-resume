@@ -1,4 +1,5 @@
 import os
+import csv
 import boto3
 import datetime as dt 
 from dateutil import tz
@@ -24,13 +25,15 @@ class ScheduleRedshift(ForecastBase):
         
         self.events_client = boto3.client("events")
         self.forecast_query_client = boto3.client("forecastquery")
+        self.s3_client = boto3.client("s3")
 
     def schedule_redshift(self):
         try:
-            forecasts = self.get_forecast_values(forcast_arn=self.get_forecast_arn(), item_filter_value=self.REDSHIFT_CLUSTER_ID)
+            # forecasts = self.get_forecast_values(forcast_arn=self.get_forecast_arn(), item_filter_value=self.REDSHIFT_CLUSTER_ID)
+            forecasts = self.get_forecast_values(bucket_name=self.FORECAST_EXPORT_BUCKET)
             
-            self.schedule_resume(forecasts=forecasts["Forecast"]["Predictions"]["mean"]) # always schedule the resume first
-            self.schedule_pause(forecasts=forecasts["Forecast"]["Predictions"]["mean"])  
+            self.schedule_resume(forecasts=forecasts) # always schedule the resume first
+            self.schedule_pause(forecasts=forecasts)  
             
         except Exception as e:
             self.logger.error("Exception: {0}".format(e))
@@ -39,15 +42,16 @@ class ScheduleRedshift(ForecastBase):
         """Schedule when to resume the redshift cluster with the forecasts passed
         
         Keyword Arguments:
-            forecasts {list} -- results from a get_forecast_values api call (default: {[]})
+            forecasts {list} -- results from a get_forecast_values api call in a csv file via forecast export job to s3 bucket (default: {[]})
         """
-        for item in forecasts:
-            item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")    # timestamp from forecast
+        for i in range(1, len(forecasts)):
+            item = forecasts[i].decode("utf-8").split(",")                                  # convert from bytes to unicode, list objects: item[0] : item id; item[1] : timestamp; item[2] : mean cpu utilisation      
+            item_ts_local = dt.datetime.strptime(item[1], "%Y-%m-%dT%H:%M:%SZ")             # timestamp from forecast
             item_ts_local  = item_ts_local.replace(tzinfo=tz.gettz(self.TIMEZONE))          # add timezone to timestamp
             item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC"))                         # convert time to UTC, use this to schedule
             ts_diff_utc = item_ts_utc - self.current_ts_utc                                 # schedule event after current timestamp
             
-            if item["Value"] > self.THRESHOLD and self.resume_scheduled == False and ts_diff_utc.total_seconds() >= 0: 
+            if float(item[2]) > self.THRESHOLD and self.resume_scheduled == False and ts_diff_utc.total_seconds() >= 0: 
                 resume_ts_utc = item_ts_utc - dt.timedelta(minutes = 30)                    # resume redshift earlier
                 self.resume_scheduled = True
         
@@ -63,15 +67,16 @@ class ScheduleRedshift(ForecastBase):
         """Schedule when to pause the redshift cluster with the forecasts passed. Depends on resume redshift schedule variables 
         
         Keyword Arguments:
-            forecasts {list} -- results from a get_forecast_values api call (default: {[]})
+            forecasts {list} -- results from a get_forecast_values api call in a csv file via forecast export job to s3 bucket (default: {[]})
         """
-        for item in forecasts:
-            item_ts_local = dt.datetime.strptime(item["Timestamp"], "%Y-%m-%dT%H:%M:%S")    # timestamp from forecast
+        for i in range(1, len(forecasts)):
+            item = forecasts[i].decode("utf-8").split(",")                                  # convert from bytes to unicode, list objects: item[0] : item id; item[1] : timestamp; item[2] : mean cpu utilisation
+            item_ts_local = dt.datetime.strptime(item[1], "%Y-%m-%dT%H:%M:%SZ")             # timestamp from forecast
             item_ts_local  = item_ts_local.replace(tzinfo=tz.gettz(self.TIMEZONE))          # add timezone to timestamp
             item_ts_utc = item_ts_local.astimezone(tz.gettz("UTC"))                         # convert time to UTC, use this to schedule
             ts_diff_utc = item_ts_utc - self.current_ts_utc                                 # schedule event after current timestamp
 
-            if item["Value"] < self.THRESHOLD and self.pause_scheduled == False and ts_diff_utc.total_seconds() >= 0:
+            if float(item[2]) < self.THRESHOLD and self.pause_scheduled == False and ts_diff_utc.total_seconds() >= 0:
                 ts_diff_utc = item_ts_utc - self.resume_ts_utc + dt.timedelta(hours = 2)    # schedule event after two hours of resuming redshift
                 
                 if  self.resume_scheduled == True and ts_diff_utc.total_seconds() >= 0:     # assign when resume is scheduled and let redshift be resumed for at least 2 hours
@@ -90,24 +95,42 @@ class ScheduleRedshift(ForecastBase):
             self.disable_scheduled_event(event_name=self.PAUSE_REDSHIFT_EVENT_NAME)
             self.logger.info("Event: {0} DISABLED".format(self.PAUSE_REDSHIFT_EVENT_NAME))
     
-    def get_forecast_values(self, forcast_arn = "", item_filter_value = ""):
+    
+    def get_forecast_values(self, bucket_name = ""):
         """Retrieves the forecast values of an item using the specified forecast job with the query_forecast api
         
         Keyword Arguments:
-            forcast_arn {str} -- forecast arn (default: {""})
-            item_filter_value {str} -- item filter (default: {""})
+            bucket_name {str} -- bucket name (default: {""})
         
         Returns:
-            dict -- Resulting query forecast result
+            string -- 
         """
-        response = self.forecast_query_client.query_forecast(
-            ForecastArn = forcast_arn,
-            Filters = {
-                "item_id": item_filter_value
-            }
-        ) 
-        
+        bucket_objects = self.s3_client.list_objects(Bucket=bucket_name)["Contents"]
+        for i in range(0, len(bucket_objects)): 
+            if self.FORECAST_EXPORT_NAME in bucket_objects[i]["Key"]:
+                object_name = bucket_objects[i]["Key"]
+                
+        response = self.s3_client.get_object(Bucket=bucket_name, Key=object_name)["Body"].read().split()
         return response  
+    
+    # def get_forecast_values(self, forcast_arn = "", item_filter_value = ""):
+    #     """Retrieves the forecast values of an item using the specified forecast job with the query_forecast api
+        
+    #     Keyword Arguments:
+    #         forcast_arn {str} -- forecast arn (default: {""})
+    #         item_filter_value {str} -- item filter (default: {""})
+        
+    #     Returns:
+    #         dict -- Resulting query forecast result
+    #     """
+    #     response = self.forecast_query_client.query_forecast(
+    #         ForecastArn = forcast_arn,
+    #         Filters = {
+    #             "item_id": item_filter_value
+    #         }
+    #     ) 
+        
+    #     return response  
             
     def schedule_event(self, event_name = "", target_arn = "", event_role_arn = "" , event_description = "", minute = 0, hour = 0):
         """Schedule a Cloudwatch event sometime within a day

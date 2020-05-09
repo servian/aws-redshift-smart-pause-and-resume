@@ -9,7 +9,7 @@ logger.setLevel(logging.INFO)
 
 # TODO: add capability to scrape for all incomplete data. e.g, when history has until 2020-04-06. if today is 2020-04-09, then need to scrape data for days 2020-04-07 and 2020-04-08
 def handler(event, context):
-    BUCKET_NAME = os.environ["BUCKET_NAME"]
+    METRICS_BUCKET = os.environ["METRICS_BUCKET"]
     REDSHIFT_CLUSTER_ID = os.environ["REDSHIFT_CLUSTER_ID"]
     INTERVAL_MINUTES = int(os.environ["INTERVAL_MINUTES"])
     TIMEZONE = os.environ["TIMEZONE"]
@@ -40,8 +40,7 @@ def handler(event, context):
                 dt.timedelta(minutes=INTERVAL_MINUTES)
 
         s3_client = boto3.client("s3")
-        s3_client.put_object(Body=csv_string, Bucket=BUCKET_NAME, Key="{0}.csv".format(
-            dt_start_local.strftime("%Y-%m-%d-%H:%M:%S-%Z%z")))
+        s3_client.put_object(Body=csv_string, Bucket=METRICS_BUCKET, Key="{0}.csv".format(dt_start_local.strftime("%Y-%m-%d-%H:%M:%S-%Z%z")))
         logger.info("done with {0} data".format(dt_start_local.strftime("%Y-%m-%d-%H:%M:%S-%Z%z")))
     except Exception as e:
         logger.error("Exception: {0}".format(e))
@@ -60,42 +59,27 @@ def get_redshift_metrics(start_time=dt.datetime(2000, 1, 1, 1, 0, 0, 0), end_tim
     Returns:
         float -- Average redshift CPU utilisation from start_time to end_time obtained every interval_minutes
     """
-    redshift_client = boto3.client("redshift")
-    num_nodes = redshift_client.describe_clusters(ClusterIdentifier=redshift_cluster_id)["Clusters"][0]["NumberOfNodes"]
-
-    if num_nodes == 1:	
-        nodes = ["Shared"]	
-    else:	
-        nodes = ["Compute-{0}".format(i) for i in range(0, num_nodes)]	
-        nodes.append("Leader")	
-
-    node_avg_metrics = []	
+    time_diff = end_time - start_time
+    if time_diff.total_seconds() != interval_minutes * 60:
+        raise Exception("start_time and end_time diff in seconds not equal to provided interval_minutes")
+    
     cloudwatch_client = boto3.client("cloudwatch")
-    for node in nodes:
-        response = cloudwatch_client.get_metric_statistics(
-            Namespace="AWS/Redshift",
-            MetricName="CPUUtilization",	       
-            Dimensions=[
-                {	    
-                    "Name": "ClusterIdentifier",
-                    "Value": redshift_cluster_id
-                },	        
-                {	        
-                    "Name": "NodeID",
-                    "Value": node	 
-                }	        
-            ],	   
-            StartTime=start_time,	
-            EndTime=end_time,	
-            Period=interval_minutes * 60,	
-            Statistics=["Average"]	
-        )	
+    response = cloudwatch_client.get_metric_statistics(
+        Namespace="AWS/Redshift",
+        MetricName="CPUUtilization",
+        Dimensions=[
+            {
+                "Name": "ClusterIdentifier",
+                "Value": redshift_cluster_id
+            }
+        ],
+        StartTime=start_time,
+        EndTime=end_time,
+        Period=interval_minutes * 60,
+        Statistics=["Average"]
+    )
 
-        if response["Datapoints"]:	
-            node_avg_metrics.append(	
-                float(response["Datapoints"][0]["Average"]))	
-        else:	
-            node_avg_metrics.append(0)	
-
-
-    return sum(node_avg_metrics)/len(node_avg_metrics)  # avg across nodes
+    if response["Datapoints"]:
+        return float(response["Datapoints"][0]["Average"])
+    else:
+        return float(0)

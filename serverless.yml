@@ -18,7 +18,7 @@ custom:
     slim: true
   # cli options variables 
   redshiftclusterid: ${opt:redshiftclusterid}
-  algorithmarn: ${opt:algorithmarn, "arn:aws:forecast:::algorithm/Deep_AR_Plus"}
+  algorithmarn: ${opt:algorithmarn, "arn:aws:forecast:::algorithm/ARIMA"}
   enableautoml: ${opt:enableautoml, "DISABLED"} # possible values are ENABLED or DISABLED
   timezone: ${opt:timezone, "Australia/Melbourne"}
   intervalminutes: ${opt:intervalminutes, "15"}
@@ -54,7 +54,8 @@ provider:
     INTERVAL_MINUTES: ${self:custom.intervalminutes}
     ALGORITHM_ARN: ${self:custom.algorithmarn}
     ENABLE_AUTOML: ${self:custom.automl.${self:custom.enableautoml}, ${self:custom.automl.default}}
-    BUCKET_NAME: "#{MetricsBucket}"
+    METRICS_BUCKET: "#{MetricsBucket}"
+    FORECAST_EXPORT_BUCKET: "#{ForecastExportsBucket}"
     FORECAST_ROLE_ARN: "#{ForecastRole.Arn}" 
     REDSHIFT_CLUSTER_ID: ${self:custom.redshiftclusterid} 
   stackTags:
@@ -130,6 +131,13 @@ functions:
           - "events:PutTargets"
           - "events:DisableRule"
         Resource: "*"
+      - Effect: Allow
+        Action:
+          - "s3:GetObject"
+          - "s3:ListBucket"
+        Resource: 
+          - "#{ForecastExportsBucket.Arn}"
+          - "#{ForecastExportsBucket.Arn}/*"
     package:
       exclude:
         - auto_redshift/**
@@ -257,6 +265,30 @@ functions:
         - auto_redshift/**
         - auto_trigger/**
         - auto_scrape/**
+  
+  CreateForecastExportJob:
+    handler: create_forecast_export_job.handler
+    module: auto_forecast
+    name: ${self:service}-create-forecast-export-job-${self:provider.stage}
+    memorySize: 256
+    timeout: 60
+    package:
+      exclude:
+        - auto_redshift/**
+        - auto_trigger/**
+        - auto_scrape/**
+
+  CheckForecastExportJobStatus:
+    handler: check_forecast_export_job_status.handler
+    module: auto_forecast
+    name: ${self:service}-check-forecast-export-job-status-${self:provider.stage}
+    memorySize: 256
+    timeout: 60
+    package:
+      exclude:
+        - auto_redshift/**
+        - auto_trigger/**
+        - auto_scrape/**
 
   OldPredictorCleanup:
     handler: old_predictor_cleanup.handler
@@ -276,6 +308,21 @@ functions:
     name: ${self:service}-old-forecast-cleanup-${self:provider.stage}
     memorySize: 256
     timeout: 60
+    iamRoleStatementsName: ${self:service}-${self:provider.stage}-OldForecastCleanup-lambdaRole
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - "s3:Get*"
+          - "s3:List*"
+          - "s3:DeleteObject"
+          - "s3:DeleteObjects"
+        Resource: 
+          - "#{ForecastExportsBucket.Arn}"
+          - "#{ForecastExportsBucket.Arn}/*"
+      - Effect: Allow
+        Action:
+          - "forecast:*"
+        Resource: "*"
     package:
       exclude:
         - auto_redshift/**
@@ -358,6 +405,16 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:service}-redshift-metrics-bucket-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: TRUE
+          BlockPublicPolicy: TRUE
+          IgnorePublicAcls: TRUE
+          RestrictPublicBuckets: TRUE
+    
+    ForecastExportsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-redshift-forecast-exports-bucket-${self:provider.stage}
         PublicAccessBlockConfiguration:
           BlockPublicAcls: TRUE
           BlockPublicPolicy: TRUE
@@ -450,6 +507,8 @@ resources:
                     - "#{OldPredictorCleanupLambdaFunction.Arn}"
                     - "#{CreateForecastJobLambdaFunction.Arn}"
                     - "#{CheckForecastJobStatusLambdaFunction.Arn}"
+                    - "#{CreateForecastExportJobLambdaFunction.Arn}"
+                    - "#{CheckForecastExportJobStatusLambdaFunction.Arn}"
                     - "#{OldForecastCleanupLambdaFunction.Arn}"
                     - "#{OldDatasetImportCleanupLambdaFunction.Arn}"
                     - "#{ScheduleRedshiftLambdaFunction.Arn}"
@@ -462,6 +521,14 @@ resources:
                     - "logs:CreateLogGroup"
                     - "logs:CreateLogStream"
                     - "logs:PutLogEvents"
+                    - "logs:CreateLogDelivery"
+                    - "logs:GetLogDelivery"
+                    - "logs:UpdateLogDelivery"
+                    - "logs:DeleteLogDelivery"
+                    - "logs:ListLogDeliveries"
+                    - "logs:PutResourcePolicy"
+                    - "logs:DescribeResourcePolicies"
+                    - "logs:DescribeLogGroups"
                   Resource: "*"
     
     ResumeRedshiftEventRule:
@@ -544,6 +611,22 @@ resources:
               "CheckForecastJobStatus": {
                 "Type": "Task",
                 "Resource": "#{CheckForecastJobStatusLambdaFunction.Arn}",
+                "Retry": [{
+                  "ErrorEquals": ["ResourceCreateInProgressException"],
+                  "IntervalSeconds": 20,
+                  "MaxAttempts": 20,
+                  "BackoffRate": 2
+                }],
+                "Next": "CreateForecastExportJob"
+              },
+              "CreateForecastExportJob": {
+                "Type": "Task",
+                "Resource": "#{CreateForecastExportJobLambdaFunction.Arn}",
+                "Next": "CheckForecastExportJobStatus"
+              },
+              "CheckForecastExportJobStatus": {
+                "Type": "Task",
+                "Resource": "#{CheckForecastExportJobStatusLambdaFunction.Arn}",
                 "Retry": [{
                   "ErrorEquals": ["ResourceCreateInProgressException"],
                   "IntervalSeconds": 20,
@@ -639,6 +722,8 @@ resources:
   Outputs:
     MetricsBucketName:
       Value: "#{MetricsBucket}"
+    ForecastExportsBucketName:
+      Value: "#{ForecastExportsBucket}"
     Timezone:
       Value: ${self:custom.timezone}
     IntervalMinutes:

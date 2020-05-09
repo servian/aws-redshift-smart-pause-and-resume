@@ -24,7 +24,7 @@ An example of this is showcased below. For this example, given the forecasted CP
 
 This tool in a nutshell consists to 2 step functions: (1) the [Train Forecast Model Step Function](#train-forecast-model-step-function) and (2) the [Generate Forecasts Step Function](#generate-forecasts-step-function). Both of these step functions are executed using Lambda functions, and these Lambda functions are triggered with scheduled Cloudwatch Events. Events are scheduled based on the timezone specified when deploying the tool. 
 
-![serverless-architecture](images/serverless-architecture.png)
+![serverless-architecture](images/serverless-architecture.svg)
 
 ### Train Forecast Model Step Function
 
@@ -186,7 +186,7 @@ possible values `ENABLED` or `DISABLED` (default: `DISABLED`)
 
 `--algorithmarn` (string)
 
-[Possible values](https://docs.aws.amazon.com/forecast/latest/dg/aws-forecast-choosing-recipes.html) (default: `arn:aws:forecast:::algorithm/Deep_AR_Plus`)
+[Possible values](https://docs.aws.amazon.com/forecast/latest/dg/aws-forecast-choosing-recipes.html) (default: `arn:aws:forecast:::algorithm/ARIMA`)
 
 `--timezone` (string)
 

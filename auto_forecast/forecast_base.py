@@ -18,28 +18,30 @@ class ForecastBase:
         self.INTERVAL_MINUTES = os.environ["INTERVAL_MINUTES"]
         self.ALGORITHM_ARN = os.environ["ALGORITHM_ARN"]
         self.ENABLE_AUTOML = os.environ["ENABLE_AUTOML"]
-        self.BUCKET_NAME = os.environ["BUCKET_NAME"]
+        self.METRICS_BUCKET = os.environ["METRICS_BUCKET"]
+        self.FORECAST_EXPORT_BUCKET = os.environ["FORECAST_EXPORT_BUCKET"]
         self.FORECAST_ROLE_ARN = os.environ["FORECAST_ROLE_ARN"] # to allow access to s3 bucket 
 
         self.FORECAST_HORIZON = int(24*(60/int(self.INTERVAL_MINUTES))) # one days worth of forecats given the interval in minutes
         self.FORECAST_FREQ = "{0}min".format(self.INTERVAL_MINUTES) # format is e.g, 5min, 10min etc.
         self.DATASET_FREQ = "{0}min".format(self.INTERVAL_MINUTES) # format is e.g, 5min, 10min etc.
 
-        self.CURRENT_LOCAL_TIMESTAMP = dt.datetime.now().astimezone(tz.gettz(self.TIMEZONE)).strftime("%Y%m%d")
+        self.CURRENT_LOCAL_TIMESTAMP = dt.datetime.now().astimezone(tz.gettz(self.TIMEZONE)).strftime("%Y%m%d") # unique id until millisecond
         self.LAMBDA_FUNCTION_ARN = context.invoked_function_arn
         self.REGION = self.LAMBDA_FUNCTION_ARN.split(":")[3]
         self.ACCOUNT_ID = self.LAMBDA_FUNCTION_ARN.split(":")[4]
 
         self.DATASET_NAME = "{0}_dataset".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_")) # is based on the redshiftclusterid but instead of "-" uses "_"
         self.DATASET_GROUP_NAME = "{0}_dataset_group_name".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"))
-        self.DATASET_IMPORT_JOB_NAME = "{0}_import{1}".format(self.DATASET_NAME, self.CURRENT_LOCAL_TIMESTAMP)
-        self.PREDICTOR_NAME = "{0}_predictor{1}".format(self.DATASET_NAME, self.CURRENT_LOCAL_TIMESTAMP)
-        self.FORECAST_NAME = "{0}_forecast{1}".format(self.DATASET_NAME, self.CURRENT_LOCAL_TIMESTAMP)
+        self.DATASET_IMPORT_JOB_NAME = "{0}_import{1}".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"), self.CURRENT_LOCAL_TIMESTAMP) 
+        self.PREDICTOR_NAME = "{0}_predictor{1}".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"), self.CURRENT_LOCAL_TIMESTAMP)
+        self.FORECAST_NAME = "{0}_forecast{1}".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"), self.CURRENT_LOCAL_TIMESTAMP)
+        self.FORECAST_EXPORT_NAME = "{0}_export{1}".format(self.REDSHIFT_CLUSTER_ID.replace("-", "_"), self.CURRENT_LOCAL_TIMESTAMP)
 
         self.forecast_client = boto3.client("forecast")
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
-
+    
     def get_dataset_group_arn(self):
         """Returns dataset group arn
 
@@ -79,6 +81,14 @@ class ForecastBase:
             string -- dataset predictor job arn
         """
         return "arn:aws:forecast:{0}:{1}:forecast/{2}".format(self.REGION, self.ACCOUNT_ID, self.FORECAST_NAME)
+    
+    def get_forecast_export_job_arn(self):
+        """Returns forecast export job arn
+
+        Returns:
+            string -- forecast export job arn
+        """
+        return "arn:aws:forecast:{0}:{1}:forecast-export-job/{2}/{3}".format(self.REGION, self.ACCOUNT_ID, self.FORECAST_NAME, self.FORECAST_EXPORT_NAME)
     
     def action_based_on_status(self, status="", resource_arn=""):
         """Commence an action based on the status of a resource

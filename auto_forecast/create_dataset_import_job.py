@@ -3,7 +3,7 @@ from forecast_base import ForecastBase
 class CreateDatasetImportJob(ForecastBase):
     def __init__(self, context):
         super().__init__(context)
-        self.s3_OBJECT_KEY = "s3://{0}/".format(self.BUCKET_NAME)
+        self.s3_OBJECT_KEY = "s3://{0}/".format(self.METRICS_BUCKET)
         self.TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss" 
 
     def create_dataset_import_job(self):

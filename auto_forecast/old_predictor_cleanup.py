@@ -7,15 +7,26 @@ class OldPredictorCleanup(ForecastBase):
 
     def old_predictor_cleanup(self):
         try:
-            predictor_jobs = self.get_predictor_jobs()
+            predictor_jobs = self.get_predictor_jobs(dataset_group_arn=self.get_dataset_group_arn())
             # cleanup old predictors
             for i in range(0, len(predictor_jobs)):
                 if predictor_jobs[i]["PredictorArn"] != self.get_predictor_arn():
-                    self.forecast_client.delete_predictor(PredictorArn = predictor_jobs[i]["PredictorArn"])
-                    self.logger.info("Initialised delete predictor job: {0}".format(predictor_jobs[i]["PredictorArn"]))
+                    self.delete_predictor_job(predictor_job_arn=predictor_jobs[i]["PredictorArn"])
         except Exception as e:
             self.logger.error("Exception: {0}".format(e))
 
+    def delete_predictor_job(self, predictor_job_arn=""):
+        """delete predictor job
+        
+        Keyword Arguments:
+            predictor_job_arn {string} -- predictor job arn (default: {""})
+        """
+        try:
+            self.forecast_client.delete_predictor(PredictorArn=predictor_job_arn)
+            self.logger.info("Initialised delete predictor job: {0}".format(predictor_job_arn))
+        except:
+            pass
+        
     @staticmethod
     def get_predictor_jobs(dataset_group_arn=""):
         """Returns all existing predictor jobs under the dataset group

@@ -10,11 +10,22 @@ class OldDatasetImportCleanup(ForecastBase):
             # cleanup old predictors
             for i in range(0, len(dataset_import_jobs)):
                 if dataset_import_jobs[i]["DatasetImportJobArn"] != self.get_dataset_import_job_arn():
-                    self.forecast_client.delete_dataset_import_job(DatasetImportJobArn=dataset_import_jobs[i]["DatasetImportJobArn"])
-                    self.logger.info("Initialised delete dataset import job: {0}".format(dataset_import_jobs[i]["DatasetImportJobArn"]))
+                    self.delete_dataset_import_job(dataset_import_job_arn=dataset_import_jobs[i]["DatasetImportJobArn"])
         except Exception as e:
             self.logger.error("Exception: {0}".format(e))
 
+    def delete_dataset_import_job(self, dataset_import_job_arn=""):
+        """delete dataset import job
+        
+        Keyword Arguments:
+            dataset_import_job_arn {string} -- dataset import job arn (default: {""})
+        """
+        try:
+            self.forecast_client.delete_dataset_import_job(DatasetImportJobArn=dataset_import_job_arn)
+            self.logger.info("Initialised delete dataset import job: {0}".format(dataset_import_job_arn))
+        except:
+            pass
+    
     def get_dataset_import_jobs(self):
         """Returns all dataset import jobs in a dataset arn
         
